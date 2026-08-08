@@ -1,0 +1,20 @@
+Vagrant.configure("2") do |config|
+
+  config.vm.box = "ubuntu/jammy64"
+  config.vm.hostname = "stt-db"
+
+  config.vm.network "forwarded_port",
+    guest: 1433,
+    host: 1433,
+    host_ip: "127.0.0.1"
+
+  config.vm.provider "virtualbox" do |vb|
+    vb.name = "STT-DB"
+    vb.memory = 8192
+    vb.cpus = 4
+  end
+
+  config.vm.provision "shell",
+    path: "provision.sh"
+
+end
