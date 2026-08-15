@@ -1,3 +1,10 @@
+/*
+    Projekt:        STT-DB Modulararbeit II
+    Datei:          00_CreateDatabase.sql
+    Beschreibung:   Erstellt die Datenbank für das
+                    Swiss-Table-Tennis-Demonstrationsprojekt.
+*/
+
 USE master;
 GO
 
