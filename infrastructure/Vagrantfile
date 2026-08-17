@@ -1,19 +1,28 @@
 Vagrant.configure("2") do |config|
 
+  # Mehr Zeit für langsame Boots
+  config.vm.boot_timeout = 600
+
+  # Ubuntu 22.04 LTS
   config.vm.box = "ubuntu/jammy64"
+
+  # Hostname der VM
   config.vm.hostname = "stt-db"
 
+  # SQL Server Port von Windows zur VM weiterleiten
   config.vm.network "forwarded_port",
     guest: 1433,
     host: 1433,
     host_ip: "127.0.0.1"
 
+  # VirtualBox Einstellungen
   config.vm.provider "virtualbox" do |vb|
     vb.name = "STT-DB"
     vb.memory = 8192
     vb.cpus = 4
   end
 
+  # Provisionierung: SQL Server installieren
   config.vm.provision "shell",
     path: "provision.sh"
 
