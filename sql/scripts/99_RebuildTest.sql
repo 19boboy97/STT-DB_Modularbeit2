@@ -1,0 +1,21 @@
+/*
+    Gesamttest:
+    Aufbau einer frischen Testdatenbank
+    aus allen SQL-Dateien.
+*/
+
+USE master;
+GO
+
+IF DB_ID('STT_DB_REBUILD_TEST') IS NOT NULL
+BEGIN
+    ALTER DATABASE STT_DB_REBUILD_TEST
+    SET SINGLE_USER
+    WITH ROLLBACK IMMEDIATE;
+
+    DROP DATABASE STT_DB_REBUILD_TEST;
+END
+GO
+
+CREATE DATABASE STT_DB_REBUILD_TEST;
+GO
