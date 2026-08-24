@@ -1,5 +1,3 @@
-USE STT_DB;
-GO
 
 /*
     Tabelle: Turnier
