@@ -7,8 +7,8 @@ Relationale Datenbank für Swiss Table Tennis
 | | |
 |---|---|
 | **Autor** | Christian Abbühl |
-| **Klasse** | **B-TIP-24-T-a** |
-| **Modul** | **Datenbanken\_und\_Big\_Data** |
+| **Klasse** | B-TIP-24-T-a |
+| **Modul** | Datenbanken\_und\_Big\_Data |
 | **Abgabedatum** | 21.09.2026 |
 | **Repository** | STT-DB_Modularbeit2 |
 
