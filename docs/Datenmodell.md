@@ -1,1754 +1,935 @@
 # Datenmodell
 
-## 1. Ziel
-
-Dieses Dokument beschreibt das Datenmodell der STT-Datenbank.
-
-Die Datenbank bildet folgende Bereiche ab:
-
-- Saison
-- Verbände
-- Clubs und Spielorte
-- Spieler und Vereinszuordnungen
-- Alterskategorien
-- Elo und Klassierungen
-- Benutzer und Berechtigungen
-- Ligawettbewerbe
-- Mannschaften
-- Begegnungen
-- Einzel-, Doppel- und Satzresultate
-- Turniere und Anmeldungen
-
-## 2. Allgemeine Konventionen
-
-- Technische IDs verwenden in der Regel `INT IDENTITY` oder `BIGINT IDENTITY`.
-- Lizenznummern sind fachliche Schlüssel und bleiben lebenslang eindeutig.
-- Vereinsnummern sind fachliche Schlüssel und bleiben eindeutig.
-- Texte mit Umlauten verwenden `NVARCHAR`.
-- Datumswerte verwenden `DATE`.
-- Datum und Uhrzeit verwenden `DATETIME2(0)`.
-- Ja/Nein-Werte verwenden `BIT`.
-- Fremdschlüssel werden mit `FK` gekennzeichnet.
-- Primärschlüssel werden mit `PK` gekennzeichnet.
-- Optionale Felder dürfen `NULL` enthalten.
-
-## 3. Tabellenübersicht
-
-1. Saison
-2. Verband
-3. Club
-4. Spielort
-5. Spieler
-6. SpielerSaison
-7. SpielerVerein
-8. Alterskategorie
-9. Klassierungsstufe
-10. Klassierungsgrenze
-11. Bewertungsperiode
-12. SpielerBewertung
-13. SpielerElo
-14. EloMonatslauf
-15. EloProtokoll
-16. Funktion
-17. Vereinsfunktionaer
-18. FunktionaerFunktion
-19. Benutzer
-20. BenutzerMannschaft
-21. Ball
-22. Spielsystem
-23. Ligawettbewerb
-24. Ligaphase
-25. Mannschaft
-26. MannschaftSpieler
-27. Begegnung
-28. Begegnungsaufstellung
-29. Begegnungsbemerkung
-30. BegegnungAenderung
-31. Turnier
-32. TurnierKategorie
-33. Einzelanmeldung
-34. Doppelanmeldung
-35. Turniermannschaft
-36. TurniermannschaftSpieler
-37. Einzelspiel
-38. Doppelspiel
-39. Satz
-
-## 4. Saison
-
-### Zweck
-
-Speichert eine Spielzeit von Swiss Table Tennis.
-
-### Felder
-
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| SaisonID | INT IDENTITY | Nein | PK | 1 |
-| Bezeichnung | VARCHAR(9) | Nein | UNIQUE | 2026/27 |
-| Startdatum | DATE | Nein | | 2026-07-01 |
-| Enddatum | DATE | Nein | | 2027-06-30 |
-| IstAktuell | BIT | Nein | | 1 |
-
-### Regeln
-
-- `Bezeichnung` muss eindeutig sein.
-- `Enddatum` muss nach `Startdatum` liegen.
-- Es soll höchstens eine Saison mit `IstAktuell = 1` geben.
-
-## 5. Verband
-
-### Zweck
-
-Speichert Swiss Table Tennis und die Regionalverbände.
-
-### Felder
-
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| VerbandID | INT IDENTITY | Nein | PK | 1 |
-| Kurzname | VARCHAR(10) | Nein | UNIQUE | MTTV |
-| Name | NVARCHAR(150) | Nein | | Mittelländischer Tischtennisverband |
-| Verbandstyp | VARCHAR(10) | Nein | | REGIONAL |
-| UebergeordneterVerbandID | INT | Ja | FK → Verband | 1 |
-| Gruendungsdatum | DATE | Ja | | 1957-04-27 |
-| Webseite | NVARCHAR(255) | Ja | | https://... |
-| Aktiv | BIT | Nein | | 1 |
+## 1. Überblick
+
+Das Datenmodell bildet zentrale Bereiche eines Verwaltungssystems für
+Swiss Table Tennis ab. Der finale Implementierungsstand umfasst 39
+Tabellen. Die Tabellen sind thematisch in Stammdaten, Spieler- und
+Vereinsdaten, Elo und Klassierung, Benutzer und Funktionen, Ligabetrieb,
+Begegnungen, Turniere sowie Spielresultate gegliedert.
+
+Die technische Referenz für dieses Dokument sind die finalen
+`CREATE TABLE`-Skripte im Ordner `sql/tables`. Detailregeln zu
+Primärschlüsseln, Fremdschlüsseln, UNIQUE-Regeln und CHECK-Constraints
+werden zusätzlich in `Constraints.md` dokumentiert.
+
+## 2. Modellierungsgrundsätze
+
+Das Modell folgt folgenden Grundsätzen:
+
+-   dauerhafte Stammdaten werden von saison- oder periodenabhängigen
+    Daten getrennt;
+-   Primär- und Fremdschlüssel sichern die referenzielle Integrität;
+-   fachlich begrenzte Wertebereiche werden soweit möglich durch
+    CHECK-Constraints abgesichert;
+-   Eindeutigkeitsregeln werden durch UNIQUE-Constraints oder gefilterte
+    UNIQUE-Indizes umgesetzt;
+-   historische Elo- und Bewertungsstände werden separat gespeichert;
+-   Einzel- und Doppelspiele können entweder aus einer Ligabegegnung
+    oder aus einer Turnierkategorie stammen;
+-   Turniermannschaften sind nicht fest an einen Club gebunden;
+-   berechenbare Auswertungen werden nicht unnötig als redundante
+    Stammdaten gespeichert.
+
+------------------------------------------------------------------------
+
+## 3. Stammdaten
+
+### 3.1 Saison
+
+**Zweck:** Speichert die einzelnen Spielsaisons.
+
+  Feld          Datentyp         NULL Bedeutung
+  ------------- -------------- ------ ----------------------------------
+  SaisonID      INT IDENTITY     Nein Primärschlüssel
+  Bezeichnung   NVARCHAR(20)     Nein Bezeichnung der Saison
+  Startdatum    DATE             Nein Beginn der Saison
+  Enddatum      DATE             Nein Ende der Saison
+  IstAktuell    BIT              Nein Kennzeichnet die aktuelle Saison
+
+Die Saisonbezeichnung ist eindeutig. Das Enddatum muss nach dem
+Startdatum liegen. Durch einen gefilterten UNIQUE-Index kann höchstens
+eine Saison als aktuell markiert sein.
+
+### 3.2 Verband
+
+**Zweck:** Speichert Swiss Table Tennis sowie die Regionalverbände.
+
+  Feld                       Datentyp          NULL Bedeutung
+  -------------------------- --------------- ------ ----------------------------
+  VerbandID                  INT IDENTITY      Nein Primärschlüssel
+  Kurzname                   VARCHAR(10)       Nein Kurzbezeichnung
+  Name                       NVARCHAR(150)     Nein Vollständiger Name
+  Verbandstyp                VARCHAR(10)       Nein `NATIONAL` oder `REGIONAL`
+  UebergeordneterVerbandID   INT                 Ja Übergeordneter Verband
+  Gruendungsdatum            DATE                Ja Gründungsdatum
+  Webseite                   NVARCHAR(255)       Ja Webseite
+  Aktiv                      BIT               Nein Aktivstatus
+
+Ein nationaler Verband besitzt keinen übergeordneten Verband. Ein
+Regionalverband muss einem übergeordneten Verband zugeordnet sein.
 
-### Regeln
+### 3.3 Alterskategorie
 
-- `Verbandstyp` ist `NATIONAL` oder `REGIONAL`.
-- Swiss Table Tennis besitzt keinen übergeordneten Verband.
-- Regionalverbände verweisen auf Swiss Table Tennis.
+**Zweck:** Definiert Alterskategorien eines Spielers.
 
-## 6. Club
+  Feld          Datentyp        NULL Bedeutung
+  ------------- ------------- ------ -----------------------------------------
+  Bezeichnung   VARCHAR(10)     Nein Primärschlüssel, z. B. `U15`
+  MinAlter      TINYINT         Nein Mindestalter
+  MaxAlter      TINYINT           Ja Höchstalter; NULL für offene Obergrenze
 
-### Zweck
+Die Alterskategorie beschreibt das Alter eines Spielers und ist nicht
+automatisch mit der Teilnahmeberechtigung eines Wettbewerbs
+gleichzusetzen.
 
-Speichert die Stammdaten eines Tischtennisclubs.
+### 3.4 Klassierungsstufe
 
-### Felder
+**Zweck:** Speichert die möglichen Klassierungsstufen von D1 bis A22.
 
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| VereinsNr | INT | Nein | PK | 50048 |
-| RegionalverbandID | INT | Nein | FK → Verband | 6 |
-| Clubname | NVARCHAR(150) | Nein | | TTC Heimberg |
-| Kurzname | NVARCHAR(80) | Nein | | Heimberg |
-| Gruendungsjahr | SMALLINT | Ja | | 1974 |
-| Strasse | NVARCHAR(100) | Ja | | Bernstrasse |
-| Hausnummer | NVARCHAR(10) | Ja | | 221 |
-| PLZ | CHAR(4) | Ja | | 3627 |
-| Ort | NVARCHAR(100) | Ja | | Heimberg |
-| Kanton | CHAR(2) | Ja | | BE |
-| Landcode | CHAR(2) | Nein | | CH |
-| KontaktEmail | NVARCHAR(255) | Ja | | info@ttc-heimberg.ch |
-| Webseite | NVARCHAR(255) | Ja | | https://www.ttc-heimberg.ch |
-| Aktiv | BIT | Nein | | 1 |
+  Feld          Datentyp       NULL Bedeutung
+  ------------- ------------ ------ ------------------------------------
+  Stufenwert    TINYINT        Nein Primärschlüssel, Werte 1 bis 22
+  Bezeichnung   VARCHAR(3)     Nein Eindeutige Klassierungsbezeichnung
 
-### Regeln
+### 3.5 Club
 
-- `VereinsNr` ist eindeutig und bleibt dauerhaft gleich.
-- `Clubname` ist der offizielle Vereinsname.
-- `Kurzname` wird unter anderem für Mannschaftsnamen verwendet.
-- Ein Club gehört zu genau einem Regionalverband.
+**Zweck:** Speichert Tischtennisclubs und deren
+Regionalverbandszugehörigkeit.
 
-## 7. Spielort
+  Feld                Datentyp          NULL Bedeutung
+  ------------------- --------------- ------ -----------------------------
+  VereinsNr           INT               Nein Primärschlüssel
+  Clubname            NVARCHAR(150)     Nein Clubname
+  Kurzname            NVARCHAR(50)        Ja Kurzbezeichnung
+  RegionalverbandID   INT               Nein Zugehöriger Regionalverband
+  Gruendungsjahr      SMALLINT            Ja Gründungsjahr
+  Webseite            NVARCHAR(255)       Ja Webseite
+  Ort                 NVARCHAR(100)       Ja Ort
+  Landcode            CHAR(2)           Nein Ländercode, Standard `CH`
+  Aktiv               BIT               Nein Aktivstatus
 
-### Zweck
+### 3.6 Spielort
 
-Speichert die Spiellokale eines Clubs.
+**Zweck:** Speichert die Spiellokale eines Clubs.
 
-### Felder
+  Feld               Datentyp          NULL Bedeutung
+  ------------------ --------------- ------ -------------------------
+  SpielortID         INT IDENTITY      Nein Primärschlüssel
+  VereinsNr          INT               Nein Zugehöriger Club
+  Bezeichnung        NVARCHAR(100)     Nein Bezeichnung
+  Gebaeude           NVARCHAR(150)       Ja Gebäude
+  Strasse            NVARCHAR(100)     Nein Strasse
+  Hausnummer         NVARCHAR(10)      Nein Hausnummer
+  PLZ                CHAR(4)           Nein Postleitzahl
+  Ort                NVARCHAR(100)     Nein Ort
+  Landcode           CHAR(2)           Nein Ländercode
+  IstHauptspielort   BIT               Nein Hauptspielort des Clubs
+  Aktiv              BIT               Nein Aktivstatus
 
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| SpielortID | INT IDENTITY | Nein | PK | 1 |
-| VereinsNr | INT | Nein | FK → Club | 50048 |
-| Bezeichnung | NVARCHAR(100) | Nein | | Spiellokal 1 |
-| Gebaeude | NVARCHAR(150) | Ja | | Turnhalle Obere Au |
-| Strasse | NVARCHAR(100) | Nein | | Niesenstrasse |
-| Hausnummer | NVARCHAR(10) | Nein | | 38 |
-| PLZ | CHAR(4) | Nein | | 3627 |
-| Ort | NVARCHAR(100) | Nein | | Heimberg |
-| Landcode | CHAR(2) | Nein | | CH |
-| IstHauptspielort | BIT | Nein | | 1 |
-| Aktiv | BIT | Nein | | 1 |
+Pro Club darf höchstens ein aktiver Hauptspielort existieren.
 
-### Regeln
+------------------------------------------------------------------------
 
-- Ein Club kann mehrere Spielorte besitzen.
-- Die Routenplaner-URL wird nicht gespeichert.
-- Die Webseite erzeugt die Karten-URL dynamisch aus den Adressfeldern.
+## 4. Spieler, Saison und Vereinszugehörigkeit
 
-## 8. Spieler
+### 4.1 Spieler
 
-### Zweck
+**Zweck:** Speichert langfristige Stammdaten eines Spielers.
 
-Speichert die langfristigen Stammdaten eines Spielers.
+  Feld           Datentyp         NULL Bedeutung
+  -------------- -------------- ------ ----------------------------------------
+  LizenzNr       INT              Nein Lebenslang eindeutiger Primärschlüssel
+  Vorname        NVARCHAR(80)     Nein Vorname
+  Nachname       NVARCHAR(80)     Nein Nachname
+  Geburtsdatum   DATE             Nein Geburtsdatum
+  Geschlecht     CHAR(1)          Nein `M` oder `W`
+  Aktiv          BIT              Nein Aktivstatus
 
-### Felder
+### 4.2 SpielerSaison
 
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| LizenzNr | INT | Nein | PK | 512038 |
-| Vorname | NVARCHAR(80) | Nein | | Christian |
-| Nachname | NVARCHAR(80) | Nein | | Abbühl |
-| Geburtsdatum | DATE | Nein | | 1998-05-10 |
-| Geschlecht | CHAR(1) | Nein | | M |
-| Aktiv | BIT | Nein | | 1 |
+**Zweck:** Speichert saisonabhängige Eigenschaften eines Spielers.
 
-### Regeln
+  --------------------------------------------------------------------------
+  Feld              Datentyp                          NULL Bedeutung
+  ----------------- ---------------- --------------------- -----------------
+  LizenzNr          INT                               Nein Spieler
 
-- `LizenzNr` ist lebenslang eindeutig und bleibt auch bei Karrierepausen gleich.
-- Es wird nur der aktuelle Name gespeichert.
-- `Geschlecht` ist `M` oder `W`.
-- Vereinszugehörigkeiten werden nicht direkt in dieser Tabelle gespeichert.
+  SaisonID          INT                               Nein Saison
 
-## 9. SpielerSaison
+  Alterskategorie   VARCHAR(10)                       Nein Feste
+                                                           Alterskategorie
+                                                           der Saison
 
-### Zweck
+  LizenzAktiv       BIT                               Nein Lizenzstatus in
+                                                           der Saison
+  --------------------------------------------------------------------------
 
-Speichert Eigenschaften eines Spielers, die für eine ganze Saison gelten.
+Der zusammengesetzte Primärschlüssel besteht aus `LizenzNr` und
+`SaisonID`.
 
-### Felder
+### 4.3 SpielerVerein
 
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| LizenzNr | INT | Nein | PK, FK → Spieler | 512038 |
-| SaisonID | INT | Nein | PK, FK → Saison | 1 |
-| Alterskategorie | VARCHAR(10) | Nein | FK → Alterskategorie | Aktive |
-| LizenzAktiv | BIT | Nein | | 1 |
+**Zweck:** Speichert die Vereinszuordnung eines Spielers innerhalb einer
+Saison.
 
-### Regeln
+  --------------------------------------------------------------------------------
+  Feld                 Datentyp                          NULL Bedeutung
+  -------------------- ---------------- --------------------- --------------------
+  SpielerVereinID      BIGINT IDENTITY                   Nein Primärschlüssel
+
+  LizenzNr             INT                               Nein Spieler
+
+  SaisonID             INT                               Nein Saison
+
+  VereinsNr            INT                               Nein Club
+
+  Zuordnungsart        VARCHAR(20)                       Nein `HAUPTVEREIN` oder
+                                                              `MEHRFACHLIZENZ`
+
+  Wettbewerbsbereich   VARCHAR(20)                       Nein Gültigkeitsbereich
+  --------------------------------------------------------------------------------
+
+Mögliche Wettbewerbsbereiche sind `ALLE`, `HERREN`, `DAMEN`, `NACHWUCHS`
+und `SENIOREN`. Pro Spieler und Saison darf nur ein Hauptverein
+existieren.
+
+------------------------------------------------------------------------
 
-- Der Primärschlüssel besteht aus `LizenzNr` und `SaisonID`.
-- Pro Spieler und Saison existiert genau ein Datensatz.
-- Die Alterskategorie bleibt während der gesamten Saison gleich.
-- `LizenzAktiv = 1` bedeutet, dass der Spieler in dieser Saison eine aktive Lizenz besitzt.
+## 5. Elo und Klassierungen
 
-## 10. SpielerVerein
+### 5.1 Bewertungsperiode
 
-### Zweck
+**Zweck:** Speichert die offiziellen Bewertungsstände innerhalb einer
+Saison.
 
-Speichert die aktuelle Vereinszuordnung eines Spielers innerhalb einer Saison.
+  Feld                  Datentyp         NULL Bedeutung
+  --------------------- -------------- ------ -----------------------------------
+  BewertungsperiodeID   INT IDENTITY     Nein Primärschlüssel
+  SaisonID              INT              Nein Saison
+  Bezeichnung           VARCHAR(20)      Nein `SAISONBEGINN` oder `SAISONMITTE`
+  Stichtag              DATE             Nein Bewertungsstichtag
+  GueltigAb             DATE             Nein Beginn der Gültigkeit
+  GueltigBis            DATE             Nein Ende der Gültigkeit
 
-Die Tabelle bildet Hauptverein und Mehrfachlizenz ab.
+### 5.2 Klassierungsgrenze
 
-### Felder
+**Zweck:** Ordnet Elo-Bereiche einer Klassierungsstufe zu.
 
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| SpielerVereinID | BIGINT IDENTITY | Nein | PK | 1 |
-| LizenzNr | INT | Nein | FK → Spieler | 512038 |
-| SaisonID | INT | Nein | FK → Saison | 1 |
-| VereinsNr | INT | Nein | FK → Club | 50048 |
-| Zuordnungsart | VARCHAR(20) | Nein | | HAUPTVEREIN |
-| Wettbewerbsbereich | VARCHAR(20) | Nein | | ALLE |
+  Feld                   Datentyp          NULL Bedeutung
+  ---------------------- --------------- ------ -----------------------
+  KlassierungsgrenzeID   INT IDENTITY      Nein Primärschlüssel
+  BewertungsperiodeID    INT               Nein Bewertungsperiode
+  Stufenwert             TINYINT           Nein Klassierungsstufe
+  Klassierungsart        VARCHAR(10)       Nein `HERREN` oder `DAMEN`
+  MinElo                 DECIMAL(10,3)       Ja Untere Grenze
+  MittelElo              DECIMAL(10,3)       Ja Mittelwert
+  MaxElo                 DECIMAL(10,3)       Ja Obere Grenze
 
-### Mögliche Werte `Zuordnungsart`
+### 5.3 SpielerBewertung
 
-- `HAUPTVEREIN`
-- `MEHRFACHLIZENZ`
+**Zweck:** Speichert offizielle halbjährliche Bewertungswerte eines
+Spielers.
 
-### Mögliche Werte `Wettbewerbsbereich`
+  Feld                  Datentyp            NULL Bedeutung
+  --------------------- ----------------- ------ ----------------------
+  SpielerBewertungID    BIGINT IDENTITY     Nein Primärschlüssel
+  LizenzNr              INT                 Nein Spieler
+  BewertungsperiodeID   INT                 Nein Bewertungsperiode
+  Elo                   DECIMAL(10,3)       Nein Elo-Wert
+  HerrenStufenwert      TINYINT             Nein Herrenklassierung
+  DamenStufenwert       TINYINT               Ja Damenklassierung
+  Alterskategorie       VARCHAR(10)         Nein Alterskategorie
+  ErstelltAm            DATETIME2(0)        Nein Erstellungszeitpunkt
 
-- `ALLE`
-- `HERREN`
-- `DAMEN`
-- `NACHWUCHS`
-- `SENIOREN`
+Pro Spieler und Bewertungsperiode ist nur ein Bewertungsdatensatz
+zulässig.
 
-### Regeln
+### 5.4 EloMonatslauf
 
-- Ein Spieler besitzt normalerweise genau einen Hauptverein.
-- Eine Mehrfachlizenz verwendet dieselbe Lizenznummer.
-- Eine Mehrfachlizenz kann zum Beispiel nur für Damen oder Nachwuchs gelten.
-- Vereinswechsel werden nicht historisiert. Es interessiert nur die aktuelle Zuordnung.
+**Zweck:** Speichert monatliche offizielle Elo-Berechnungsläufe.
 
-## 11. Alterskategorie
+  Feld               Datentyp            NULL Bedeutung
+  ------------------ ----------------- ------ ---------------------------------------
+  EloMonatslaufID    BIGINT IDENTITY     Nein Primärschlüssel
+  Berechnungsdatum   DATE                Nein Berechnungsdatum
+  PeriodeVon         DATE                Nein Beginn des berücksichtigten Zeitraums
+  PeriodeBis         DATE                Nein Ende des Zeitraums
+  Status             VARCHAR(20)         Nein Status des Laufs
+  GestartetAm        DATETIME2(0)          Ja Startzeitpunkt
+  AbgeschlossenAm    DATETIME2(0)          Ja Abschlusszeitpunkt
+  Bemerkung          NVARCHAR(500)         Ja Bemerkung
 
-### Zweck
+Mögliche Statuswerte sind `GEPLANT`, `LAUFEND`, `ABGESCHLOSSEN` und
+`FEHLER`.
 
-Speichert die Alterskategorien eines Spielers.
+### 5.5 SpielerElo
 
-Die Kategorie beschreibt das Alter eines Spielers. Sie ist nicht automatisch identisch mit der Teilnahmeberechtigung eines Wettbewerbs.
+**Zweck:** Speichert die offiziellen monatlichen Elo-Stände eines
+Spielers.
 
-### Felder
+  Feld                  Datentyp            NULL Bedeutung
+  --------------------- ----------------- ------ -----------------------
+  SpielerEloID          BIGINT IDENTITY     Nein Primärschlüssel
+  LizenzNr              INT                 Nein Spieler
+  EloMonatslaufID       BIGINT              Nein Monatslauf
+  Elo                   DECIMAL(10,3)       Nein Elo-Wert
+  EloDeltaZumVormonat   DECIMAL(10,3)         Ja Veränderung
+  HerrenStufenwert      TINYINT             Nein Herrenklassierung
+  DamenStufenwert       TINYINT               Ja Damenklassierung
+  HerrenRang            INT                   Ja Herrenrang
+  Gesamtrang            INT                   Ja Gesamtrang
+  GueltigAb             DATE                Nein Beginn der Gültigkeit
+  GueltigBis            DATE                  Ja Ende der Gültigkeit
 
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| Bezeichnung | VARCHAR(10) | Nein | PK | U19 |
-| MinAlter | TINYINT | Nein | | 15 |
-| MaxAlter | TINYINT | Ja | | 18 |
+### 5.6 EloProtokoll
 
-### Beispieldaten
+**Zweck:** Protokolliert die Elo-Berechnung eines Spielers für ein
+einzelnes Elo-relevantes Einzelspiel.
 
-| Bezeichnung | MinAlter | MaxAlter |
-|---|---:|---:|
-| U11 | 0 | 10 |
-| U13 | 11 | 12 |
-| U15 | 13 | 14 |
-| U19 | 15 | 18 |
-| Aktive | 19 | 39 |
-| O40 | 40 | 49 |
-| O50 | 50 | 69 |
-| O70 | 70 | 79 |
-| O80 | 80 | NULL |
+  ----------------------------------------------------------------------------------------
+  Feld                       Datentyp                          NULL Bedeutung
+  -------------------------- ---------------- --------------------- ----------------------
+  EloProtokollID             BIGINT IDENTITY                   Nein Primärschlüssel
 
-### Regeln
+  EinzelspielID              BIGINT                            Nein Einzelspiel
 
-- `Aktive` beschreibt Spieler im Alter von 19 bis 39 Jahren.
-- In Wettbewerben der Aktiven dürfen Spieler aller Alterskategorien teilnehmen.
-- Jüngere Nachwuchsspieler dürfen in einer höheren Nachwuchskategorie teilnehmen.
-- Beispiel: U11 darf U13 spielen.
-- Wenn eine passende jüngere Nachwuchskategorie vorhanden ist, wird diese bevorzugt.
-- Ältere Seniorenspieler dürfen in einer jüngeren Seniorenkategorie teilnehmen.
-- Beispiel: Ein O50-Spieler darf in O40 spielen.
+  LizenzNr                   INT                               Nein Spieler
 
-## 12. Klassierungsstufe
+  GegnerLizenzNr             INT                               Nein Gegner
 
-### Zweck
+  EloMonatslaufID            BIGINT                            Nein Monatslauf
 
-Speichert die möglichen Klassierungsstufen von D1 bis A22.
+  StichtagsElo               DECIMAL(10,3)                     Nein Elo des Spielers vor
+                                                                    Berechnung
 
-Die Zahl ist gleichzeitig der fachliche Stufenwert und wird direkt als Primärschlüssel verwendet.
+  GegnerStichtagsElo         DECIMAL(10,3)                     Nein Elo des Gegners
 
-### Felder
+  Gewinnwahrscheinlichkeit   DECIMAL(6,5)                      Nein Berechnete
+                                                                    Wahrscheinlichkeit
 
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| Stufenwert | TINYINT | Nein | PK | 9 |
-| Bezeichnung | VARCHAR(3) | Nein | UNIQUE | C9 |
+  VorschauElo                DECIMAL(10,3)                     Nein Berechneter neuer
+                                                                    Elo-Wert
 
-### Beispieldaten
+  ErstelltAm                 DATETIME2(0)                      Nein Erstellungszeitpunkt
+  ----------------------------------------------------------------------------------------
 
-| Stufenwert | Bezeichnung |
-|---:|---|
-| 1 | D1 |
-| 5 | D5 |
-| 6 | C6 |
-| 9 | C9 |
-| 10 | C10 |
-| 11 | B11 |
-| 15 | B15 |
-| 16 | A16 |
-| 22 | A22 |
+Für ein Einzelspiel und einen Spieler ist nur ein Protokolleintrag
+zulässig. Normalerweise entstehen für ein Elo-relevantes Einzelspiel
+zwei Einträge. Doppelspiele sind nicht Elo-relevant.
 
-### Regeln
+------------------------------------------------------------------------
 
-- `Stufenwert` liegt zwischen 1 und 22.
-- `Bezeichnung` muss eindeutig sein.
-- D entspricht den Stufen 1 bis 5.
-- C entspricht den Stufen 6 bis 10.
-- B entspricht den Stufen 11 bis 15.
-- A entspricht den Stufen 16 bis 22.
-- Eine separate Sortierung oder Klassierungs-ID ist nicht notwendig.
+## 6. Vereinsfunktionen und Benutzer
 
-## 13. Klassierungsgrenze
+### 6.1 Funktion
 
-### Zweck
+**Zweck:** Speichert mögliche Funktionen innerhalb eines Clubs.
 
-Ordnet einem Elo-Bereich eine Klassierungsstufe zu.
+  Feld          Datentyp          NULL Bedeutung
+  ------------- --------------- ------ ---------------------------------
+  FunktionID    INT IDENTITY      Nein Primärschlüssel
+  Bezeichnung   NVARCHAR(100)     Nein Eindeutige Funktionsbezeichnung
+  Aktiv         BIT               Nein Aktivstatus
 
-Die Klassierungsgrenzen können sich zwischen Saisonbeginn und Saisonmitte ändern und werden deshalb einer Bewertungsperiode zugeordnet.
+### 6.2 Vereinsfunktionaer
 
-### Felder
+**Zweck:** Speichert Kontaktpersonen eines Clubs. Ein Funktionär muss
+kein lizenzierter Spieler sein.
 
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| KlassierungsgrenzeID | INT IDENTITY | Nein | PK | 1 |
-| BewertungsperiodeID | INT | Nein | FK → Bewertungsperiode | 2 |
-| Stufenwert | TINYINT | Nein | FK → Klassierungsstufe | 9 |
-| Klassierungsart | VARCHAR(10) | Nein | | HERREN |
-| MinElo | DECIMAL(10,3) | Ja | | 1100.000 |
-| MittelElo | DECIMAL(10,3) | Ja | | 1125.000 |
-| MaxElo | DECIMAL(10,3) | Ja | | 1149.999 |
+  Feld            Datentyp          NULL Bedeutung
+  --------------- --------------- ------ -----------------
+  FunktionaerID   INT IDENTITY      Nein Primärschlüssel
+  VereinsNr       INT               Nein Club
+  Vorname         NVARCHAR(80)      Nein Vorname
+  Nachname        NVARCHAR(80)      Nein Nachname
+  Email           NVARCHAR(255)       Ja E-Mail
+  TelefonPrivat   NVARCHAR(30)        Ja Privattelefon
+  TelefonMobil    NVARCHAR(30)        Ja Mobiltelefon
+  Strasse         NVARCHAR(100)       Ja Strasse
+  Hausnummer      NVARCHAR(10)        Ja Hausnummer
+  PLZ             CHAR(4)             Ja Postleitzahl
+  Ort             NVARCHAR(100)       Ja Ort
+  Aktiv           BIT               Nein Aktivstatus
 
-### Mögliche Werte `Klassierungsart`
+### 6.3 FunktionaerFunktion
 
-- `HERREN`
-- `DAMEN`
+**Zweck:** Verknüpft Vereinsfunktionäre mit ihren Funktionen.
 
-### Regeln
+  Feld            Datentyp     NULL Bedeutung
+  --------------- ---------- ------ -----------------------
+  FunktionaerID   INT          Nein Funktionär
+  FunktionID      INT          Nein Funktion
+  GueltigAb       DATE         Nein Beginn der Gültigkeit
+  GueltigBis      DATE           Ja Ende der Gültigkeit
 
-- Jeder Spieler besitzt eine Herrenklassierung.
-- Frauen besitzen zusätzlich eine Damenklassierung.
-- Beide Klassierungen basieren auf demselben Elo-Wert.
-- Die Elo-Bereiche einer Klassierungsart dürfen sich innerhalb derselben Bewertungsperiode nicht überschneiden.
-- `MinElo` kann bei der tiefsten Stufe `NULL` sein.
-- `MaxElo` kann bei der höchsten Stufe `NULL` sein.
+Der Primärschlüssel besteht aus `FunktionaerID`, `FunktionID` und
+`GueltigAb`.
 
-## 14. Bewertungsperiode
+### 6.4 Benutzer
 
-### Zweck
+**Zweck:** Speichert Benutzerkonten für die Verwaltung.
 
-Speichert die beiden offiziellen Bewertungsstände einer Saison.
+  Feld           Datentyp          NULL Bedeutung
+  -------------- --------------- ------ -------------------------------
+  BenutzerID     INT IDENTITY      Nein Primärschlüssel
+  Benutzername   NVARCHAR(100)     Nein Eindeutiger Benutzername
+  Anzeigename    NVARCHAR(150)     Nein Anzeigename
+  LizenzNr       INT                 Ja Optional zugeordneter Spieler
+  Rolle          VARCHAR(20)       Nein Benutzerrolle
+  VereinsNr      INT                 Ja Optionaler Clubbezug
+  VerbandID      INT                 Ja Optionaler Verbandsbezug
+  Aktiv          BIT               Nein Aktivstatus
 
-Diese Werte werden insbesondere für Turnierzulassungen und Klassierungsgrenzen verwendet.
+Implementierte Rollen sind `CAPTAIN`, `VEREIN`, `KLASSENLEITER` und
+`ADMIN`.
 
-### Felder
+------------------------------------------------------------------------
 
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| BewertungsperiodeID | INT IDENTITY | Nein | PK | 2 |
-| SaisonID | INT | Nein | FK → Saison | 1 |
-| Bezeichnung | VARCHAR(20) | Nein | | SAISONMITTE |
-| Stichtag | DATE | Nein | | 2026-01-01 |
-| GueltigAb | DATE | Nein | | 2026-01-01 |
-| GueltigBis | DATE | Nein | | 2026-06-30 |
+## 7. Ligabetrieb und Mannschaften
 
-### Mögliche Werte `Bezeichnung`
+### 7.1 Ball
 
-- `SAISONBEGINN`
-- `SAISONMITTE`
+**Zweck:** Speichert verwendete Tischtennisbälle.
 
-### Beispiel
+  Feld     Datentyp          NULL Bedeutung
+  -------- --------------- ------ -----------------
+  BallID   INT IDENTITY      Nein Primärschlüssel
+  Marke    NVARCHAR(100)     Nein Hersteller
+  Modell   NVARCHAR(100)     Nein Modell
+  Farbe    VARCHAR(20)       Nein Farbe
+  Aktiv    BIT               Nein Aktivstatus
 
-| Bezeichnung | Stichtag | GueltigAb | GueltigBis |
-|---|---|---|---|
-| SAISONBEGINN | 2025-07-01 | 2025-07-01 | 2025-12-31 |
-| SAISONMITTE | 2026-01-01 | 2026-01-01 | 2026-06-30 |
+Die Kombination aus Marke, Modell und Farbe ist eindeutig.
 
-### Regeln
+### 7.2 Spielsystem
 
-- Pro Saison existieren zwei Bewertungsperioden.
-- Turnierkriterien verwenden den für das Turnier gültigen Bewertungsstand.
-- Elo- und Klassierungswerte werden nicht zum Zeitpunkt der Anmeldung eingefroren, sondern über die Bewertungsperiode bestimmt.
+**Zweck:** Definiert Spielsysteme für Mannschaftsbegegnungen.
 
-## 15. SpielerBewertung
+  Feld              Datentyp          NULL Bedeutung
+  ----------------- --------------- ------ --------------------------------
+  SpielsystemID     INT IDENTITY      Nein Primärschlüssel
+  Bezeichnung       NVARCHAR(100)     Nein Bezeichnung
+  AnzahlSpieler     TINYINT           Nein Vorgesehene Spielerzahl
+  AnzahlEinzel      TINYINT           Nein Zahl der Einzel
+  AnzahlDoppel      TINYINT           Nein Zahl der Doppel
+  MaxAnzahlSpiele   TINYINT           Nein Maximale Gesamtzahl der Spiele
+  Aktiv             BIT               Nein Aktivstatus
 
-### Zweck
+`MaxAnzahlSpiele` muss der Summe aus Einzel- und Doppelspielen
+entsprechen.
 
-Speichert die offiziellen halbjährlichen Bewertungswerte eines Spielers.
+### 7.3 Ligawettbewerb
 
-Diese Werte werden vor allem für Turnierzulassungen verwendet.
+**Zweck:** Definiert einen Ligawettbewerb innerhalb einer Saison.
 
-### Felder
+  Feld                   Datentyp          NULL Bedeutung
+  ---------------------- --------------- ------ ---------------------------
+  LigawettbewerbID       INT IDENTITY      Nein Primärschlüssel
+  SaisonID               INT               Nein Saison
+  VerbandID              INT               Nein Veranstaltender Verband
+  Bezeichnung            NVARCHAR(100)     Nein Wettbewerb
+  Geschlechtskategorie   VARCHAR(10)       Nein `HERREN` oder `DAMEN`
+  Alterskategorie        VARCHAR(10)         Ja Optionale Alterskategorie
+  SpielsystemID          INT               Nein Spielsystem
+  Aktiv                  BIT               Nein Aktivstatus
 
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| SpielerBewertungID | BIGINT IDENTITY | Nein | PK | 1 |
-| LizenzNr | INT | Nein | FK → Spieler | 512038 |
-| BewertungsperiodeID | INT | Nein | FK → Bewertungsperiode | 2 |
-| Elo | DECIMAL(10,3) | Nein | | 1110.000 |
-| HerrenStufenwert | TINYINT | Nein | FK → Klassierungsstufe | 9 |
-| DamenStufenwert | TINYINT | Ja | FK → Klassierungsstufe | 13 |
-| Alterskategorie | VARCHAR(10) | Nein | FK → Alterskategorie | Aktive |
-| ErstelltAm | DATETIME2(0) | Nein | | 2026-01-01 00:00:00 |
+### 7.4 Ligaphase
 
-### Regeln
+**Zweck:** Speichert Gruppen beziehungsweise Phasen eines
+Ligawettbewerbs.
 
-- Pro Spieler und Bewertungsperiode existiert genau ein Datensatz.
-- Jeder Spieler besitzt einen `HerrenStufenwert`.
-- Bei Männern ist `DamenStufenwert = NULL`.
-- Frauen besitzen zusätzlich einen Damenklassierungswert.
-- Die Alterskategorie wird aus `SpielerSaison` übernommen.
-- Die Daten bleiben für die jeweilige Bewertungsperiode unverändert.
+  Feld                      Datentyp          NULL Bedeutung
+  ------------------------- --------------- ------ ----------------------
+  LigaphaseID               INT IDENTITY      Nein Primärschlüssel
+  LigawettbewerbID          INT               Nein Ligawettbewerb
+  Bezeichnung               NVARCHAR(100)     Nein Bezeichnung
+  Phasentyp                 VARCHAR(20)       Nein Phasentyp
+  Gruppenbezeichnung        NVARCHAR(50)        Ja Gruppenbezeichnung
+  KlassenleiterBenutzerID   INT                 Ja Zuständiger Benutzer
+  Aktiv                     BIT               Nein Aktivstatus
 
-## 16. SpielerElo
+Mögliche Phasentypen sind `HAUPTRUNDE`, `VORRUNDE` und `FINALRUNDE`.
 
-### Zweck
+### 7.5 Mannschaft
 
-Speichert die offiziellen monatlichen Elo-Stände eines Spielers.
+**Zweck:** Speichert eine Ligamannschaft eines Clubs.
 
-Damit kann der Elo-Verlauf eines Spielers über mehrere Monate und Jahre nachvollzogen werden.
+  Feld               Datentyp         NULL Bedeutung
+  ------------------ -------------- ------ -------------------
+  MannschaftID       INT IDENTITY     Nein Primärschlüssel
+  VereinsNr          INT              Nein Club
+  LigaphaseID        INT              Nein Ligaphase
+  MannschaftNummer   TINYINT          Nein Mannschaftsnummer
+  KapitaenLizenz     INT              Nein Kapitän
+  BallID             INT                Ja Verwendeter Ball
+  Aktiv              BIT              Nein Aktivstatus
 
-### Felder
+Die Kombination aus Ligaphase, Club und Mannschaftsnummer ist eindeutig.
 
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| SpielerEloID | BIGINT IDENTITY | Nein | PK | 1001 |
-| LizenzNr | INT | Nein | FK → Spieler | 512038 |
-| EloMonatslaufID | BIGINT | Nein | FK → EloMonatslauf | 15 |
-| Elo | DECIMAL(10,3) | Nein | | 1116.000 |
-| EloDeltaZumVormonat | DECIMAL(10,3) | Ja | | -29.000 |
-| HerrenStufenwert | TINYINT | Nein | FK → Klassierungsstufe | 9 |
-| DamenStufenwert | TINYINT | Ja | FK → Klassierungsstufe | NULL |
-| HerrenRang | INT | Ja | | 764 |
-| Gesamtrang | INT | Ja | | 815 |
-| GueltigAb | DATE | Nein | | 2025-12-10 |
-| GueltigBis | DATE | Ja | | 2026-01-09 |
+### 7.6 MannschaftSpieler
 
-### Regeln
+**Zweck:** Ordnet Spieler einer Ligamannschaft zu.
 
-- Pro Spieler und Monatslauf existiert genau ein offizieller Elo-Stand.
-- Der Elo-Wert gilt bis zum nächsten Berechnungsstichtag.
-- Innerhalb eines Berechnungsmonats wird für alle Spiele immer mit dem Elo-Wert des letzten offiziellen Stichtags gerechnet.
-- `EloDeltaZumVormonat` zeigt die Veränderung gegenüber dem vorherigen offiziellen Monatsstand.
-- Die Rangwerte beziehen sich auf den offiziellen Monatsstand.
+  --------------------------------------------------------------------------------
+  Feld                  Datentyp                          NULL Bedeutung
+  --------------------- ---------------- --------------------- -------------------
+  MannschaftSpielerID   BIGINT IDENTITY                   Nein Primärschlüssel
 
-## 17. EloMonatslauf
+  MannschaftID          INT                               Nein Mannschaft
 
-### Zweck
+  LizenzNr              INT                               Nein Spieler
 
-Speichert die monatlichen offiziellen Elo-Berechnungsläufe.
+  Meldungsart           VARCHAR(20)                       Nein `STAMMSPIELER` oder
+                                                               `ERSATZSPIELER`
 
-Alle Elo-relevanten Einzelspiele seit dem letzten Berechnungsstichtag werden einem Monatslauf zugeordnet.
+  StammPosition         TINYINT                             Ja Stammposition 1 bis
+                                                               3
 
-### Felder
+  Spielberechtigt       BIT                               Nein Aktuelle
+                                                               Spielberechtigung
 
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| EloMonatslaufID | BIGINT IDENTITY | Nein | PK | 15 |
-| Berechnungsdatum | DATE | Nein | UNIQUE | 2025-12-10 |
-| PeriodeVon | DATE | Nein | | 2025-11-10 |
-| PeriodeBis | DATE | Nein | | 2025-12-09 |
-| Status | VARCHAR(20) | Nein | | ABGESCHLOSSEN |
-| GestartetAm | DATETIME2(0) | Ja | | 2025-12-10 00:05:00 |
-| AbgeschlossenAm | DATETIME2(0) | Ja | | 2025-12-10 00:10:00 |
-| Bemerkung | NVARCHAR(500) | Ja | | Monatslauf Dezember |
+  Bemerkung             NVARCHAR(500)                       Ja Optionale Bemerkung
+  --------------------------------------------------------------------------------
 
-### Mögliche Werte `Status`
+Ein Stammspieler benötigt eine Stammposition zwischen 1 und 3. Ein
+Ersatzspieler besitzt keine Stammposition.
 
-- `GEPLANT`
-- `LAUFEND`
-- `ABGESCHLOSSEN`
-- `FEHLER`
+### 7.7 BenutzerMannschaft
 
-### Regeln
+**Zweck:** Ordnet Benutzer einer oder mehreren Mannschaften zu.
 
-- Der offizielle Berechnungsstichtag liegt jeweils am 10. des Monats.
-- Alle Spiele innerhalb der Periode verwenden den Elo-Wert des letzten offiziellen Stichtags.
-- Nach Abschluss des Monatslaufs entsteht für jeden betroffenen Spieler ein neuer Datensatz in `SpielerElo`.
+  Feld           Datentyp     NULL Bedeutung
+  -------------- ---------- ------ ------------
+  BenutzerID     INT          Nein Benutzer
+  MannschaftID   INT          Nein Mannschaft
 
-## 18. EloProtokoll
+Der zusammengesetzte Primärschlüssel verhindert doppelte Zuordnungen.
+Die Tabelle ist insbesondere für Benutzer mit der Rolle `CAPTAIN`
+vorgesehen.
 
-### Zweck
+------------------------------------------------------------------------
 
-Speichert die Elo-Auswirkung eines einzelnen Elo-relevanten Einzelspiels.
+## 8. Begegnungen
 
-Pro Einzelspiel entstehen zwei Datensätze:
-- ein Datensatz für Spieler 1
-- ein Datensatz für Spieler 2
+### 8.1 Begegnung
 
-### Felder
+**Zweck:** Speichert eine vollständige Mannschaftsbegegnung innerhalb
+einer Ligaphase.
 
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| EloProtokollID | BIGINT IDENTITY | Nein | PK | 1 |
-| EinzelspielID | BIGINT | Nein | FK → Einzelspiel | 10001 |
-| LizenzNr | INT | Nein | FK → Spieler | 512038 |
-| GegnerLizenzNr | INT | Nein | FK → Spieler | 510101 |
-| Berechnungsstichtag | DATE | Nein | | 2025-11-10 |
-| StichtagsElo | DECIMAL(10,3) | Nein | | 1145.000 |
-| GegnerStichtagsElo | DECIMAL(10,3) | Nein | | 1281.000 |
-| Gewinnwahrscheinlichkeit | DECIMAL(8,6) | Nein | | 0.172800 |
-| EloDelta | DECIMAL(10,3) | Nein | | -8.000 |
-| VorschauElo | DECIMAL(10,3) | Nein | | 1137.000 |
-| EloMonatslaufID | BIGINT | Ja | FK → EloMonatslauf | 16 |
-| Berechnungsdatum | DATETIME2(0) | Nein | | 2025-11-26 22:00:00 |
+  Feld                    Datentyp            NULL Bedeutung
+  ----------------------- ----------------- ------ -------------------------
+  BegegnungID             BIGINT IDENTITY     Nein Primärschlüssel
+  LigaphaseID             INT                 Nein Ligaphase
+  HeimMannschaftID        INT                 Nein Heimmannschaft
+  GastMannschaftID        INT                 Nein Gastmannschaft
+  SpielortID              INT                 Nein Spielort
+  Runde                   TINYINT               Ja Runde
+  Datum                   DATE                Nein Datum
+  Startzeit               TIME(0)             Nein Startzeit
+  Endzeit                 TIME(0)               Ja Endzeit
+  SiegeHeim               TINYINT               Ja Gewonnene Spiele Heim
+  SiegeGast               TINYINT               Ja Gewonnene Spiele Gast
+  MannschaftspunkteHeim   TINYINT               Ja Tabellenpunkte Heim
+  MannschaftspunkteGast   TINYINT               Ja Tabellenpunkte Gast
+  SaetzeHeim              SMALLINT              Ja Gesamtsätze Heim
+  SaetzeGast              SMALLINT              Ja Gesamtsätze Gast
+  BaelleHeim              SMALLINT              Ja Gesamtbälle Heim
+  BaelleGast              SMALLINT              Ja Gesamtbälle Gast
+  ZuschauerAnzahl         SMALLINT              Ja Zuschauer
+  SchiedsrichterName      NVARCHAR(150)         Ja Schiedsrichter
+  MatchblattGenehmigt     BIT                 Nein Genehmigungskennzeichen
+  GenehmigtAm             DATETIME2(0)          Ja Genehmigungszeitpunkt
+  GenehmigtVon            INT                   Ja Genehmigender Benutzer
+  Status                  VARCHAR(20)         Nein Begegnungsstatus
 
-### Regeln
+Mögliche Statuswerte sind `GEPLANT`, `LAUFEND`, `ABGESCHLOSSEN`,
+`GENEHMIGT` und `ANNULLIERT`. Heim- und Gastmannschaft müssen
+verschieden sein. Für eine genehmigte Begegnung müssen
+Genehmigungskennzeichen, Zeitpunkt und Benutzer vorhanden sein.
 
-- Elo-relevant sind nur `REGULAER` und `AUFGABE`.
-- `FORFAIT`, `NICHTANGETRETEN` und `ANNULLIERT` erzeugen kein Elo-Protokoll.
-- Innerhalb eines Monats wird immer mit dem offiziellen Elo des letzten Berechnungsstichtags gerechnet.
-- Der Elo-Wert eines früheren Spiels im gleichen Monat wird nicht als Ausgangswert für das nächste Spiel verwendet.
-- `VorschauElo` zeigt den kumulierten Zwischenstand nach diesem Spiel.
+Die aggregierten Resultate werden bewusst in der Begegnung gespeichert.
+Die detaillierten Einzel-, Doppel- und Satzresultate bleiben zusätzlich
+erhalten.
 
-### Siegwahrscheinlichkeit
+### 8.2 Begegnungsaufstellung
 
-Die Siegwahrscheinlichkeit wird berechnet mit:
+**Zweck:** Speichert die Spieleraufstellung einer konkreten Begegnung.
 
-`1 / (1 + 10 ^ ((GegnerElo - EigeneElo) / 200))`
+  Feld                      Datentyp            NULL Bedeutung
+  ------------------------- ----------------- ------ --------------------
+  BegegnungsaufstellungID   BIGINT IDENTITY     Nein Primärschlüssel
+  BegegnungID               BIGINT              Nein Begegnung
+  MannschaftID              INT                 Nein Mannschaft
+  LizenzNr                  INT                 Nein Spieler
+  Seite                     VARCHAR(4)          Nein `HEIM` oder `GAST`
+  Position                  CHAR(1)             Nein Position
 
-Beispiel:
+Heimpositionen sind `A`, `B`, `C`; Gastpositionen `X`, `Y`, `Z`.
+Innerhalb einer Begegnung dürfen weder eine Position noch ein Spieler
+doppelt vorkommen.
 
-- Eigener Elo: 1145
-- Gegner Elo: 1281
-- Siegwahrscheinlichkeit: ca. 0.173
+### 8.3 Begegnungsbemerkung
 
-Die Niederlagewahrscheinlichkeit ergibt sich als:
+**Zweck:** Speichert Bemerkungen zu einer Begegnung.
 
-`1 - Siegwahrscheinlichkeit`
+  Feld                    Datentyp            NULL Bedeutung
+  ----------------------- ----------------- ------ ----------------------
+  BegegnungsbemerkungID   BIGINT IDENTITY     Nein Primärschlüssel
+  BegegnungID             BIGINT              Nein Begegnung
+  BenutzerID              INT                 Nein Verfasser
+  Bemerkungsart           VARCHAR(20)         Nein Art der Bemerkung
+  Text                    NVARCHAR(MAX)       Nein Bemerkung
+  ErstelltAm              DATETIME2(0)        Nein Erstellungszeitpunkt
 
-## 19. Funktion
+Mögliche Arten sind `VEREIN`, `KLASSENLEITER` und `ADMIN`.
 
-### Zweck
+### 8.4 BegegnungAenderung
 
-Speichert mögliche Funktionen innerhalb eines Clubs.
+**Zweck:** Dokumentiert nachträgliche Änderungen an bereits genehmigten
+Begegnungen.
 
-### Felder
+  Feld                   Datentyp            NULL Bedeutung
+  ---------------------- ----------------- ------ --------------------
+  BegegnungAenderungID   BIGINT IDENTITY     Nein Primärschlüssel
+  BegegnungID            BIGINT              Nein Begegnung
+  BenutzerID             INT                 Nein Ändernder Benutzer
+  Aenderungsdatum        DATETIME2(0)        Nein Zeitpunkt
+  Grund                  NVARCHAR(500)       Nein Änderungsgrund
 
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| FunktionID | INT IDENTITY | Nein | PK | 1 |
-| Bezeichnung | NVARCHAR(100) | Nein | UNIQUE | Präsident |
-| Aktiv | BIT | Nein | | 1 |
+Der Änderungsgrund darf nicht leer sein.
 
-### Beispieldaten
+------------------------------------------------------------------------
 
-- Präsident
-- Finanzchef
-- Sekretär
-- Technischer Verantwortlicher
-- Nachwuchsverantwortlicher
+## 9. Turniere und Anmeldungen
 
-### Regeln
+### 9.1 Turnier
 
-- Die Bezeichnung einer Funktion muss eindeutig sein.
-- Nur aktive Funktionen sollen für neue Zuordnungen verwendet werden.
+**Zweck:** Speichert die allgemeinen Stammdaten eines Turniers.
 
-## 20. Vereinsfunktionaer
+  Feld                       Datentyp          NULL Bedeutung
+  -------------------------- --------------- ------ ----------------------
+  TurnierID                  INT IDENTITY      Nein Primärschlüssel
+  SaisonID                   INT               Nein Saison
+  BewertungsperiodeID        INT               Nein Bewertungsgrundlage
+  Turniername                NVARCHAR(150)     Nein Name
+  VeranstalterNr             INT               Nein Veranstaltender Club
+  SpielortID                 INT               Nein Spielort
+  Startdatum                 DATE              Nein Start
+  Enddatum                   DATE                Ja Ende
+  Meldeschluss               DATETIME2(0)      Nein Meldeschluss
+  HallenSchiedsrichterName   NVARCHAR(150)       Ja Hallenschiedsrichter
+  Status                     VARCHAR(20)       Nein Status
 
-### Zweck
+Mögliche Statuswerte sind `GEPLANT`, `OFFEN`, `AUSGELOST`, `LAUFEND`,
+`BEENDET` und `ABGESAGT`.
 
-Speichert Kontaktpersonen eines Clubs.
+### 9.2 TurnierKategorie
 
-Ein Vereinsfunktionär muss kein lizenzierter Spieler sein.
+**Zweck:** Speichert eine Kategorie beziehungsweise Konkurrenz eines
+Turniers.
 
-### Felder
+  ------------------------------------------------------------------------------------------------------
+  Feld                                     Datentyp                          NULL Bedeutung
+  ---------------------------------------- ---------------- --------------------- ----------------------
+  TurnierKategorieID                       INT IDENTITY                      Nein Primärschlüssel
 
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| FunktionaerID | INT IDENTITY | Nein | PK | 1 |
-| VereinsNr | INT | Nein | FK → Club | 50048 |
-| Vorname | NVARCHAR(80) | Nein | | Fabio |
-| Nachname | NVARCHAR(80) | Nein | | Leus |
-| Email | NVARCHAR(255) | Ja | | fabio.leus@example.ch |
-| TelefonPrivat | NVARCHAR(30) | Ja | | 033 437 06 38 |
-| TelefonMobil | NVARCHAR(30) | Ja | | 077 422 11 60 |
-| Strasse | NVARCHAR(100) | Ja | | Aarestrasse |
-| Hausnummer | NVARCHAR(10) | Ja | | 13 |
-| PLZ | CHAR(4) | Ja | | 3627 |
-| Ort | NVARCHAR(100) | Ja | | Heimberg |
-| Aktiv | BIT | Nein | | 1 |
+  TurnierID                                INT                               Nein Turnier
 
-### Regeln
+  Bezeichnung                              NVARCHAR(150)                     Nein Kategoriebezeichnung
 
-- Ein Funktionär gehört zu genau einem Club.
-- Ein Funktionär kann mehrere Funktionen besitzen.
-- Die eigentliche Funktionszuordnung erfolgt über `FunktionaerFunktion`.
+  Kategorieart                             VARCHAR(20)                       Nein Art der Einschränkung
 
-## 21. FunktionaerFunktion
+  Wettkampfform                            VARCHAR(15)                       Nein `EINZEL`, `DOPPEL`
+                                                                                  oder `MANNSCHAFT`
 
-### Zweck
+  Geschlechtskategorie                     VARCHAR(10)                       Nein Geschlechtskategorie
 
-Verknüpft Vereinsfunktionäre mit ihren Funktionen.
+  VerwendeteKlassierungsart                VARCHAR(10)                         Ja `HERREN` oder `DAMEN`
 
-Ein Funktionär kann mehrere Funktionen gleichzeitig besitzen.
+  Alterskategorie                          VARCHAR(10)                         Ja Alterskategorie
 
-### Felder
+  Altersregel                              VARCHAR(20)                       Nein Altersregel
 
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| FunktionaerID | INT | Nein | PK, FK → Vereinsfunktionaer | 1 |
-| FunktionID | INT | Nein | PK, FK → Funktion | 1 |
-| GueltigAb | DATE | Nein | PK | 2025-07-01 |
-| GueltigBis | DATE | Ja | | NULL |
+  BevorzugePassendeKategorie               BIT                               Nein Präferenzregel
 
-### Regeln
+  MinStufenwert                            TINYINT                             Ja Minimale Klassierung
 
-- Der Primärschlüssel besteht aus `FunktionaerID`, `FunktionID` und `GueltigAb`.
-- Eine Person kann mehrere Funktionen gleichzeitig besitzen.
-- `GueltigBis = NULL` bedeutet, dass die Zuordnung aktuell gültig ist.
+  MaxStufenwert                            TINYINT                             Ja Maximale Klassierung
 
-## 22. Benutzer
+  AlleSpielerMuessenKlassierungErfuellen   BIT                               Nein Teamregel Klassierung
 
-### Zweck
+  MinEloWert                               DECIMAL(10,3)                       Ja Minimaler Einzel-Elo
 
-Speichert Benutzerkonten für die Verwaltung der STT-Datenbank.
+  TopEloWert                               DECIMAL(10,3)                       Ja Oberer Einzel-Elo
 
-### Felder
+  AlleSpielerMuessenEloErfuellen           BIT                               Nein Teamregel Elo
 
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| BenutzerID | INT IDENTITY | Nein | PK | 1 |
-| Benutzername | NVARCHAR(100) | Nein | UNIQUE | heimberg.admin |
-| Anzeigename | NVARCHAR(150) | Nein | | TTC Heimberg |
-| LizenzNr | INT | Ja | FK → Spieler | 512038 |
-| Rolle | VARCHAR(20) | Nein | | VEREIN |
-| VereinsNr | INT | Ja | FK → Club | 50048 |
-| VerbandID | INT | Ja | FK → Verband | 6 |
-| Aktiv | BIT | Nein | | 1 |
+  SpielerProTeam                           TINYINT                             Ja Spielerzahl bei
+                                                                                  Mannschaft
 
-### Mögliche Werte `Rolle`
+  MinKlassierungSumme                      SMALLINT                            Ja Minimale
+                                                                                  Klassierungssumme
 
-- `CAPTAIN`
-- `VEREIN`
-- `KLASSENLEITER`
-- `ADMIN`
+  MaxKlassierungSumme                      SMALLINT                            Ja Maximale
+                                                                                  Klassierungssumme
 
-### Rechte
+  MinEloSumme                              DECIMAL(10,3)                       Ja Minimale Elo-Summe
 
-#### CAPTAIN
+  MaxEloSumme                              DECIMAL(10,3)                       Ja Maximale Elo-Summe
 
-- darf Resultate und Matchblätter der zugewiesenen Mannschaft pflegen
-- darf nicht automatisch andere Mannschaften des Clubs bearbeiten
+  Gewinnsaetze                             TINYINT                           Nein 3 oder 4 Gewinnsätze
 
-#### VEREIN
+  Status                                   VARCHAR(20)                       Nein Status
+  ------------------------------------------------------------------------------------------------------
 
-- darf Daten des eigenen Vereins pflegen
-- darf Spielorte verwalten
-- darf Vereinsfunktionäre verwalten
-- darf Mannschaften und Mannschaftskader verwalten
-- darf Resultate aller eigenen Mannschaften pflegen
+Kategoriearten sind `ALTER`, `KLASSIERUNG`, `ELO`, `OFFEN` und
+`KOMBINIERT`. Altersregeln sind `ALLE`, `BIS_MAXALTER`, `AB_MINALTER`
+und `EXAKT`.
 
-#### KLASSENLEITER
+### 9.3 Einzelanmeldung
 
-- darf die ihm zugeordneten Ligaphasen verwalten
-- darf Matchblätter genehmigen
-- darf genehmigte Matchblätter korrigieren
-- kann für einen Regionalverband oder eine Nationalliga zuständig sein
+**Zweck:** Speichert die Anmeldung eines Spielers zu einer
+Einzelkategorie.
 
-#### ADMIN
+  Feld                 Datentyp            NULL Bedeutung
+  -------------------- ----------------- ------ -----------------
+  EinzelanmeldungID    BIGINT IDENTITY     Nein Primärschlüssel
+  TurnierKategorieID   INT                 Nein Kategorie
+  LizenzNr             INT                 Nein Spieler
+  Anmeldedatum         DATETIME2(0)        Nein Anmeldung
+  Status               VARCHAR(20)         Nein Status
+  Ablehnungsgrund      NVARCHAR(500)         Ja Ablehnungsgrund
 
-- besitzt vollständigen Zugriff
+Elo, Klassierung und Alterskategorie werden nicht redundant in der
+Anmeldung gespeichert. Die Kombination aus Kategorie und Spieler ist
+eindeutig.
 
-### Regeln
+### 9.4 Doppelanmeldung
 
-- `LizenzNr` ist insbesondere bei einem Captain sinnvoll.
-- `VereinsNr` wird bei Vereinsbenutzern verwendet.
-- `VerbandID` kann bei Klassenleitern verwendet werden.
-- Nicht jede Rolle benötigt alle optionalen Fremdschlüssel.
+**Zweck:** Speichert die Anmeldung eines Doppelpaares.
 
-## 23. BenutzerMannschaft
+  -----------------------------------------------------------------------------
+  Feld                 Datentyp                          NULL Bedeutung
+  -------------------- ---------------- --------------------- -----------------
+  DoppelanmeldungID    BIGINT IDENTITY                   Nein Primärschlüssel
 
-### Zweck
+  TurnierKategorieID   INT                               Nein Kategorie
 
-Ordnet einen Benutzer mit der Rolle `CAPTAIN` einer oder mehreren Mannschaften zu.
+  Spieler1LizenzNr     INT                               Nein Spieler 1
 
-Damit kann eingeschränkt werden, welche Mannschaftsergebnisse ein Captain pflegen darf.
+  Spieler2LizenzNr     INT                               Nein Spieler 2
 
-### Felder
+  Anmeldedatum         DATETIME2(0)                      Nein Anmeldung
 
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| BenutzerID | INT | Nein | PK, FK → Benutzer | 1 |
-| MannschaftID | INT | Nein | PK, FK → Mannschaft | 25 |
+  Status               VARCHAR(20)                       Nein Status
 
-### Regeln
+  Ablehnungsgrund      NVARCHAR(500)                       Ja Ablehnungsgrund
 
-- Der Primärschlüssel besteht aus `BenutzerID` und `MannschaftID`.
-- Der Benutzer sollte die Rolle `CAPTAIN` besitzen.
-- Ein Captain kann nur die zugeordneten Mannschaften bearbeiten.
-- Ein Benutzer kann bei Bedarf mehreren Mannschaften zugeordnet werden.
+  SpielerMinLizenz     berechnet,                      Nein\* Kleinere
+                       PERSISTED                              Lizenznummer
 
-## 24. Ball
+  SpielerMaxLizenz     berechnet,                      Nein\* Grössere
+                       PERSISTED                              Lizenznummer
+  -----------------------------------------------------------------------------
 
-### Zweck
+\* Die beiden Werte sind persistierte berechnete Spalten aus den beiden
+nicht-nullbaren Lizenznummern.
 
-Speichert die verschiedenen zugelassenen bzw. verwendeten Tischtennisbälle.
+Die Reihenfolge der Spieler spielt für die Eindeutigkeit nicht mit. Ein
+UNIQUE-Index über Kategorie, kleinere Lizenznummer und grössere
+Lizenznummer verhindert sowohl `(A,B)` als auch `(B,A)` als doppelte
+Anmeldung.
 
-Ballmarke, Modell und Farbe werden separat gespeichert, da verschiedene Kombinationen existieren.
+### 9.5 Turniermannschaft
 
-### Felder
+**Zweck:** Speichert eine speziell für ein Turnier gebildete Mannschaft.
 
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| BallID | INT IDENTITY | Nein | PK | 1 |
-| Marke | NVARCHAR(100) | Nein | | Nittaku |
-| Modell | NVARCHAR(100) | Nein | | Premium 40+ |
-| Farbe | VARCHAR(20) | Nein | | WEISS |
-| Aktiv | BIT | Nein | | 1 |
+  Feld                  Datentyp            NULL Bedeutung
+  --------------------- ----------------- ------ -----------------
+  TurniermannschaftID   BIGINT IDENTITY     Nein Primärschlüssel
+  TurnierKategorieID    INT                 Nein Kategorie
+  Name                  NVARCHAR(100)       Nein Mannschaftsname
+  Anmeldedatum          DATETIME2(0)        Nein Anmeldung
+  Status                VARCHAR(20)         Nein Status
+  Ablehnungsgrund       NVARCHAR(500)         Ja Ablehnungsgrund
 
-### Beispieldaten
+Spieler verschiedener Clubs dürfen gemeinsam in derselben
+Turniermannschaft antreten.
 
-| Marke | Modell | Farbe |
-|---|---|---|
-| Nittaku | Premium 40+ | WEISS |
-| DHS | D40+ 3-Star | WEISS |
-| Tibhar | SYNTT NG 40+ | WEISS |
+### 9.6 TurniermannschaftSpieler
 
-### Regeln
+**Zweck:** Ordnet Spieler einer Turniermannschaft zu.
 
-- Die Kombination aus `Marke`, `Modell` und `Farbe` muss eindeutig sein.
-- Ein Ball kann von mehreren Clubs bzw. Wettbewerben verwendet werden.
-- `Aktiv = 0` kann für nicht mehr verwendete Modelle eingesetzt werden.
+  Feld                  Datentyp     NULL Bedeutung
+  --------------------- ---------- ------ ---------------------
+  TurniermannschaftID   BIGINT       Nein Turniermannschaft
+  LizenzNr              INT          Nein Spieler
+  Position              TINYINT        Ja Optionale Position
+  IstCaptain            BIT          Nein Captain-Kennzeichen
 
-## 25. Spielsystem
+Der Primärschlüssel besteht aus `TurniermannschaftID` und `LizenzNr`.
+Eine vergebene Position darf innerhalb einer Mannschaft nur einmal
+vorkommen. Durch einen gefilterten UNIQUE-Index kann höchstens ein
+Spieler pro Turniermannschaft Captain sein.
 
-### Zweck
+Für Einzel-, Doppel- und Mannschaftsanmeldungen werden die Statuswerte
+`ANGEMELDET`, `BESTAETIGT`, `ABGELEHNT` und `ZURUECKGEZOGEN` verwendet.
 
-Definiert das Spielsystem einer Mannschaftsbegegnung.
+------------------------------------------------------------------------
 
-Für das normale Schweizer Mannschaftssystem werden in der Regel neun Einzel und ein Doppel gespielt.
+## 10. Einzel-, Doppel- und Satzresultate
 
-### Felder
+### 10.1 Einzelspiel
 
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| SpielsystemID | INT IDENTITY | Nein | PK | 1 |
-| Bezeichnung | NVARCHAR(100) | Nein | UNIQUE | 3er-Mannschaft |
-| AnzahlSpieler | TINYINT | Nein | | 3 |
-| AnzahlEinzel | TINYINT | Nein | | 9 |
-| AnzahlDoppel | TINYINT | Nein | | 1 |
-| MaxAnzahlSpiele | TINYINT | Nein | | 10 |
-| Aktiv | BIT | Nein | | 1 |
+**Zweck:** Speichert ein Einzelspiel aus einer Ligabegegnung oder einer
+Turnierkategorie.
 
-### Beispiel
+  Feld                 Datentyp            NULL Bedeutung
+  -------------------- ----------------- ------ ---------------------------
+  EinzelspielID        BIGINT IDENTITY     Nein Primärschlüssel
+  BegegnungID          BIGINT                Ja Herkunft Ligabegegnung
+  TurnierKategorieID   INT                   Ja Herkunft Turnier
+  Spielnummer          TINYINT               Ja Spielnummer
+  Spielcode            VARCHAR(10)           Ja Spielcode
+  Spieler1Lizenz       INT                   Ja Spieler 1
+  Spieler2Lizenz       INT                   Ja Spieler 2
+  GewinnerLizenz       INT                   Ja Gewinner
+  Spieldatum           DATETIME2(0)        Nein Spielzeitpunkt
+  SaetzeSpieler1       TINYINT             Nein Gewonnene Sätze Spieler 1
+  SaetzeSpieler2       TINYINT             Nein Gewonnene Sätze Spieler 2
+  PunkteSpieler1       TINYINT             Nein Wertungspunkt Spieler 1
+  PunkteSpieler2       TINYINT             Nein Wertungspunkt Spieler 2
+  Spielgrund           VARCHAR(20)         Nein Art des Resultats
+  Status               VARCHAR(20)         Nein Status
 
-| Bezeichnung | AnzahlSpieler | AnzahlEinzel | AnzahlDoppel | MaxAnzahlSpiele |
-|---|---:|---:|---:|---:|
-| 3er-Mannschaft | 3 | 9 | 1 | 10 |
+Ein Einzelspiel gehört genau zu einer Ligabegegnung oder zu einer
+Turnierkategorie. `REGULAER` und `AUFGABE` sind Elo-relevant. `FORFAIT`,
+`NICHTANGETRETEN` und `ANNULLIERT` sind nicht Elo-relevant.
 
-### Regeln
+Bei einem regulären Spiel müssen beide Spieler bekannt sein. Nullable
+Spielerfelder ermöglichen die Abbildung besonderer Fälle wie Forfait
+oder Nichtantreten.
 
-- Das normale System besteht aus drei Spielern pro Mannschaft.
-- Es werden neun Einzel und ein Doppel gespielt.
-- Tritt eine Mannschaft nur mit zwei Spielern an, bleiben die Spiele der fehlenden Position als Forfait bestehen.
-- Dadurch gehen drei Einzel forfait verloren.
-- Das Doppel darf trotzdem von den beiden anwesenden Spielern gespielt werden.
-- Seltene alternative Spielsysteme werden für dieses Demonstrationsprojekt nicht detailliert modelliert.
+### 10.2 Doppelspiel
 
-## 26. Ligawettbewerb
+**Zweck:** Speichert ein Doppelspiel aus einer Ligabegegnung oder einer
+Turnierkategorie.
 
-### Zweck
+  Feld                   Datentyp            NULL Bedeutung
+  ---------------------- ----------------- ------ -------------------------
+  DoppelspielID          BIGINT IDENTITY     Nein Primärschlüssel
+  BegegnungID            BIGINT                Ja Herkunft Ligabegegnung
+  TurnierKategorieID     INT                   Ja Herkunft Turnier
+  Spielnummer            TINYINT               Ja Spielnummer
+  Spielcode              VARCHAR(10)           Ja Spielcode
+  Seite1Spieler1Lizenz   INT                   Ja Spieler 1, Seite 1
+  Seite1Spieler2Lizenz   INT                   Ja Spieler 2, Seite 1
+  Seite2Spieler1Lizenz   INT                   Ja Spieler 1, Seite 2
+  Seite2Spieler2Lizenz   INT                   Ja Spieler 2, Seite 2
+  Gewinnerseite          TINYINT               Ja Gewinnerseite 1 oder 2
+  Spieldatum             DATETIME2(0)        Nein Spielzeitpunkt
+  SaetzeSeite1           TINYINT             Nein Gewonnene Sätze Seite 1
+  SaetzeSeite2           TINYINT             Nein Gewonnene Sätze Seite 2
+  PunkteSeite1           TINYINT             Nein Wertungspunkt Seite 1
+  PunkteSeite2           TINYINT             Nein Wertungspunkt Seite 2
+  Spielgrund             VARCHAR(20)         Nein Art des Resultats
+  Status                 VARCHAR(20)         Nein Status
 
-Definiert einen Ligawettbewerb innerhalb einer Saison.
+Ein Doppelspiel gehört genau zu einer Begegnung oder zu einer
+Turnierkategorie. Bei regulären Doppelspielen müssen alle vier Spieler
+gesetzt und voneinander verschieden sein. Doppelspiele beeinflussen den
+Elo-Wert nicht.
 
-Ein Ligawettbewerb beschreibt beispielsweise die Nationalliga A, Nationalliga B oder eine Liga eines Regionalverbands.
+### 10.3 Satz
 
-### Felder
+**Zweck:** Speichert die tatsächlich gespielten Punkte eines Satzes.
 
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| LigawettbewerbID | INT IDENTITY | Nein | PK | 1 |
-| SaisonID | INT | Nein | FK → Saison | 1 |
-| VerbandID | INT | Nein | FK → Verband | 1 |
-| Bezeichnung | NVARCHAR(100) | Nein | | Nationalliga A |
-| Geschlechtskategorie | VARCHAR(10) | Nein | | HERREN |
-| Alterskategorie | VARCHAR(10) | Ja | FK → Alterskategorie | NULL |
-| SpielsystemID | INT | Nein | FK → Spielsystem | 1 |
-| Aktiv | BIT | Nein | | 1 |
+  Feld            Datentyp            NULL Bedeutung
+  --------------- ----------------- ------ -------------------------
+  SatzID          BIGINT IDENTITY     Nein Primärschlüssel
+  EinzelspielID   BIGINT                Ja Zugehöriges Einzelspiel
+  DoppelspielID   BIGINT                Ja Zugehöriges Doppelspiel
+  SatzNummer      TINYINT             Nein Satznummer 1 bis 7
+  PunkteSeite1    TINYINT             Nein Punkte Seite 1
+  PunkteSeite2    TINYINT             Nein Punkte Seite 2
 
-### Mögliche Werte `Geschlechtskategorie`
+Ein Satz gehört genau zu einem Einzel- oder einem Doppelspiel. Die
+beiden Punktestände dürfen nicht identisch sein. Gefilterte
+UNIQUE-Indizes verhindern, dass dieselbe Satznummer innerhalb eines
+Einzel- beziehungsweise Doppelspiels mehrfach gespeichert wird.
 
-- `HERREN`
-- `DAMEN`
+------------------------------------------------------------------------
 
-### Beispiele
+## 11. Beziehungen und Datenintegrität
 
-| Verband | Bezeichnung | Geschlechtskategorie | Alterskategorie |
-|---|---|---|---|
-| STT | Nationalliga A | HERREN | NULL |
-| STT | Nationalliga B | HERREN | NULL |
-| MTTV | 1. Liga | HERREN | NULL |
-| MTTV | O40 | HERREN | O40 |
+### 11.1 Zentrale Beziehungen
 
-### Regeln
+Das Modell besitzt mehrere fachliche Beziehungsketten:
 
-- Ein Ligawettbewerb gehört zu genau einer Saison.
-- Ein Ligawettbewerb wird von genau einem Verband durchgeführt.
-- Nationalligen werden durch Swiss Table Tennis (STT) durchgeführt.
-- Regionale Ligen werden durch den jeweiligen Regionalverband durchgeführt.
-- `Alterskategorie = NULL` bedeutet, dass keine spezielle Alterskategorie vorgeschrieben ist.
-- Eine Liga der Aktiven benötigt keine Altersbeschränkung, da dort auch Nachwuchs- und Seniorenspieler teilnehmen dürfen.
-- Bei einer O40-Liga können auch O50-, O70- oder O80-Spieler teilnehmen.
-- Bei Nachwuchsligen kann ein jüngerer Spieler in einer höheren Nachwuchskategorie eingesetzt werden.
+-   `Verband` → `Club` → `Spielort`
+-   `Saison` → `SpielerSaison` → `Spieler`
+-   `Spieler` → `SpielerVerein` → `Club`
+-   `Saison` → `Bewertungsperiode` → `SpielerBewertung`
+-   `EloMonatslauf` → `SpielerElo`
+-   `Einzelspiel` → `EloProtokoll`
+-   `Saison` → `Ligawettbewerb` → `Ligaphase` → `Mannschaft`
+-   `Mannschaft` → `MannschaftSpieler`
+-   `Ligaphase` → `Begegnung` → `Einzelspiel` / `Doppelspiel` → `Satz`
+-   `Turnier` → `TurnierKategorie` → Einzel-, Doppel- oder
+    Mannschaftsanmeldung
+-   `Turniermannschaft` → `TurniermannschaftSpieler`
 
-## 27. Ligaphase
+### 11.2 Historisierung
 
-### Zweck
+Nicht alle Daten werden gleich behandelt. Spieler-Stammdaten liegen
+dauerhaft in `Spieler`, während saisonabhängige Informationen in
+`SpielerSaison` und `SpielerVerein` ausgelagert sind.
 
-Speichert Gruppen bzw. Phasen eines Ligawettbewerbs.
+Offizielle halbjährliche Bewertungen werden in `SpielerBewertung`
+gespeichert. Monatliche Elo-Stände werden über `EloMonatslauf` und
+`SpielerElo` historisiert. `EloProtokoll` dokumentiert zusätzlich die
+Berechnungsgrundlage einzelner Elo-relevanter Spiele.
 
-Für dieses Projekt wird die Tabelle hauptsächlich verwendet, um verschiedene Gruppen innerhalb derselben Liga abzubilden.
+### 11.3 Redundanz und abgeleitete Daten
 
-### Felder
+Das Modell vermeidet unnötige Redundanz. Beispielsweise werden Elo,
+Klassierung und Alterskategorie bei Turnieranmeldungen nicht erneut
+gespeichert, sondern über die zugehörigen Bewertungsdaten bestimmt.
 
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| LigaphaseID | INT IDENTITY | Nein | PK | 1 |
-| LigawettbewerbID | INT | Nein | FK → Ligawettbewerb | 3 |
-| Bezeichnung | NVARCHAR(100) | Nein | | Gruppe 2 |
-| Phasentyp | VARCHAR(20) | Nein | | HAUPTRUNDE |
-| Gruppenbezeichnung | NVARCHAR(50) | Ja | | Gruppe 2 |
-| KlassenleiterBenutzerID | INT | Ja | FK → Benutzer | 12 |
-| Aktiv | BIT | Nein | | 1 |
+Bestimmte aggregierte Werte einer Mannschaftsbegegnung werden dagegen
+bewusst in `Begegnung` gespeichert. Dazu gehören Siege,
+Mannschaftspunkte, Sätze und Bälle. Damit steht das offizielle
+Gesamtergebnis direkt zur Verfügung, während die detaillierten Spiel-
+und Satzdaten weiterhin separat gespeichert werden.
 
-### Mögliche Werte `Phasentyp`
+### 11.4 Sonderfälle
 
-- `HAUPTRUNDE`
-- `VORRUNDE`
-- `FINALRUNDE`
+Das Modell berücksichtigt verschiedene fachliche Sonderfälle:
 
-### Regeln
+-   Hauptverein und Mehrfachlizenz;
+-   Stamm- und Ersatzspieler;
+-   fehlende Spieler bei Forfait oder Nichtantreten;
+-   Aufgabe nach Spielbeginn;
+-   genehmigte und nachträglich geänderte Begegnungen;
+-   Doppelpaare unabhängig von der Reihenfolge der Spieler;
+-   Turniermannschaften mit Spielern verschiedener Clubs;
+-   Einzel- und Doppelspiele mit Herkunft aus Liga oder Turnier.
 
-- Eine Ligaphase gehört zu genau einem Ligawettbewerb.
-- Ein Ligawettbewerb kann mehrere Gruppen besitzen.
-- Ein Klassenleiter kann einer oder mehreren Ligaphasen zugeordnet sein.
-- Komplexe Auf- und Abstiegslogik wird in diesem Demonstrationsprojekt nicht vollständig modelliert.
+------------------------------------------------------------------------
 
-## 28. Mannschaft
+## 12. Zusammenfassung
 
-### Zweck
+Das finale relationale Datenmodell besteht aus 39 Tabellen und deckt die
+wesentlichen Bereiche der Projektaufgabe ab. Die Struktur trennt
+langfristige Stammdaten von saison- und periodenabhängigen Informationen
+und bildet sowohl Liga- als auch Turnierbetrieb ab.
 
-Speichert eine Ligamannschaft eines Clubs.
+Besondere Schwerpunkte sind die Historisierung von Elo und
+Klassierungen, die Abbildung von Mannschaftsbegegnungen bis auf
+Satzebene, flexible Turnierkategorien sowie die Absicherung fachlicher
+Regeln durch Beziehungen, Constraints und eindeutige Indizes.
 
-Der sichtbare Mannschaftsname wird aus dem Club-Kurznamen und der Mannschaftsnummer gebildet.
-
-### Felder
-
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| MannschaftID | INT IDENTITY | Nein | PK | 1 |
-| VereinsNr | INT | Nein | FK → Club | 50048 |
-| LigaphaseID | INT | Nein | FK → Ligaphase | 1 |
-| MannschaftNummer | TINYINT | Nein | | 2 |
-| KapitaenLizenz | INT | Nein | FK → Spieler | 512038 |
-| BallID | INT | Ja | FK → Ball | 1 |
-| Aktiv | BIT | Nein | | 1 |
-
-### Anzeige des Mannschaftsnamens
-
-Beispiel bei `Club.Kurzname = Heimberg`:
-
-| MannschaftNummer | Anzeigename |
-|---:|---|
-| 1 | Heimberg |
-| 2 | Heimberg II |
-| 3 | Heimberg III |
-| 4 | Heimberg IV |
-
-### Regeln
-
-- Der Captain muss immer eine gültige Lizenznummer besitzen.
-- Die Alters- oder Geschlechtskategorie ist Teil des Ligawettbewerbs und nicht Teil des Mannschaftsnamens.
-- Eine Mannschaft in einer O40-Liga heißt beispielsweise `Heimberg II` und nicht `Senioren O40 II`.
-- Der Ball wird über `BallID` referenziert.
-
-## 29. MannschaftSpieler
-
-### Zweck
-
-Speichert die Zuordnung eines Spielers zu einer Ligamannschaft.
-
-Die Tabelle bildet Stammspieler, Ersatzspieler und die spätere Statusänderung innerhalb der Saison ab.
-
-### Felder
-
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| MannschaftSpielerID | BIGINT IDENTITY | Nein | PK | 1 |
-| MannschaftID | INT | Nein | FK → Mannschaft | 1 |
-| LizenzNr | INT | Nein | FK → Spieler | 512038 |
-| Meldungsart | VARCHAR(20) | Nein | | STAMMSPIELER |
-| StammPosition | TINYINT | Ja | | 3 |
-| Spielberechtigt | BIT | Nein | | 1 |
-| Bemerkung | NVARCHAR(500) | Ja | | NULL |
-
-### Mögliche Werte `Meldungsart`
-
-- `STAMMSPIELER`
-- `ERSATZSPIELER`
-
-### Darstellung
-
-Ein vor Saisonbeginn gemeldeter Stammspieler erhält eine Kombination aus Mannschaftsnummer und Stammposition.
-
-Beispiele:
-
-- Mannschaft 1, Position 1 → `1.1`
-- Mannschaft 1, Position 2 → `1.2`
-- Mannschaft 1, Position 3 → `1.3`
-- Mannschaft 2, Position 1 → `2.1`
-- Mannschaft 2, Position 2 → `2.2`
-- Mannschaft 2, Position 3 → `2.3`
-
-Weitere sichtbare Statuswerte:
-
-- `E` = eingesetzter Ersatzspieler
-- `S` = nach Saisonbeginn Stammspieler geworden
-- `V` = für diese Mannschaft nicht mehr spielberechtigt
-
-### Regeln
-
-- Es existieren nur die Stammpositionen 1, 2 und 3.
-- Es gibt kein `2.4`, `2.5` usw.
-- Weitere Spieler werden als Ersatzspieler geführt.
-- Sobald ein Ersatzspieler eingesetzt wurde, kann er mit `E` dargestellt werden.
-- Nach dem dritten Einsatz wird der Ersatzspieler zum Stammspieler und mit `S` dargestellt.
-- `V` bedeutet, dass der Spieler für diese Mannschaft nicht mehr spielberechtigt ist, weil er inzwischen Stammspieler einer anderen Mannschaft geworden ist.
-- Eintritts- und Austrittsdatum werden nicht gespeichert.
-- Einsatz- und Ergebnisstatistiken werden aus den tatsächlich gespeicherten Spielen berechnet und nicht redundant in dieser Tabelle gespeichert.
-
-## 30. Begegnung
-
-### Zweck
-
-Speichert eine vollständige Mannschaftsbegegnung innerhalb einer Ligaphase.
-
-### Felder
-
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| BegegnungID | BIGINT IDENTITY | Nein | PK | 9001 |
-| LigaphaseID | INT | Nein | FK → Ligaphase | 1 |
-| HeimMannschaftID | INT | Nein | FK → Mannschaft | 10 |
-| GastMannschaftID | INT | Nein | FK → Mannschaft | 11 |
-| SpielortID | INT | Nein | FK → Spielort | 3 |
-| Runde | TINYINT | Ja | | 9 |
-| Datum | DATE | Nein | | 2026-03-27 |
-| Startzeit | TIME(0) | Nein | | 19:45 |
-| Endzeit | TIME(0) | Ja | | 21:40 |
-| SiegeHeim | TINYINT | Ja | | 3 |
-| SiegeGast | TINYINT | Ja | | 7 |
-| MannschaftspunkteHeim | TINYINT | Ja | | 1 |
-| MannschaftspunkteGast | TINYINT | Ja | | 3 |
-| SaetzeHeim | SMALLINT | Ja | | 12 |
-| SaetzeGast | SMALLINT | Ja | | 24 |
-| BaelleHeim | SMALLINT | Ja | | 298 |
-| BaelleGast | SMALLINT | Ja | | 360 |
-| ZuschauerAnzahl | SMALLINT | Ja | | 2 |
-| SchiedsrichterName | NVARCHAR(150) | Ja | | Max Muster |
-| MatchblattGenehmigt | BIT | Nein | | 1 |
-| GenehmigtAm | DATETIME2(0) | Ja | | 2026-03-28 10:15:00 |
-| GenehmigtVon | INT | Ja | FK → Benutzer | 12 |
-| Status | VARCHAR(20) | Nein | | GENEHMIGT |
-
-### Mögliche Werte `Status`
-
-- `GEPLANT`
-- `LAUFEND`
-- `ABGESCHLOSSEN`
-- `GENEHMIGT`
-- `ANNULLIERT`
-
-### Mannschaftspunkte
-
-Die Mannschaftspunkte werden gespeichert.
-
-| Gewonnene Spiele | Mannschaftspunkte |
-|---:|---:|
-| 8 bis 10 | 4 |
-| 6 bis 7 | 3 |
-| 5 | 2 |
-| 3 bis 4 | 1 |
-| 0 bis 2 | 0 |
-
-Beispiele:
-
-- 8:2 → 4:0 Punkte
-- 7:3 → 3:1 Punkte
-- 5:5 → 2:2 Punkte
-- 4:6 → 1:3 Punkte
-- 2:8 → 0:4 Punkte
-
-### Regeln
-
-- Heim- und Gastmannschaft müssen verschieden sein.
-- Beide Mannschaften müssen zur gleichen Ligaphase gehören.
-- Eine normale Begegnung besteht aus neun Einzeln und einem Doppel.
-- `SiegeHeim`, `SiegeGast`, Satzverhältnis und Ballverhältnis werden beim Abschluss aus den Spielen berechnet.
-- Mannschaftspunkte werden berechnet und dauerhaft gespeichert.
-- Nach Status `GENEHMIGT` dürfen Captain und Verein die Begegnung nicht mehr ändern.
-- Klassenleiter und Admin dürfen genehmigte Begegnungen korrigieren.
-- Änderungen nach der Genehmigung werden protokolliert.
-- Ein Schiedsrichter ist nur dort relevant, wo die Wettbewerbsregeln einen verlangen.
-
-## 31. Begegnungsaufstellung
-
-### Zweck
-
-Speichert die Spieleraufstellung für eine konkrete Mannschaftsbegegnung.
-
-### Felder
-
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| BegegnungsaufstellungID | BIGINT IDENTITY | Nein | PK | 1 |
-| BegegnungID | BIGINT | Nein | FK → Begegnung | 9001 |
-| MannschaftID | INT | Nein | FK → Mannschaft | 11 |
-| LizenzNr | INT | Nein | FK → Spieler | 512038 |
-| Seite | VARCHAR(4) | Nein | | GAST |
-| Position | CHAR(1) | Nein | | Z |
-
-### Mögliche Werte `Seite`
-
-- `HEIM`
-- `GAST`
-
-### Mögliche Werte `Position`
-
-Heimmannschaft:
-
-- `A`
-- `B`
-- `C`
-
-Gastmannschaft:
-
-- `X`
-- `Y`
-- `Z`
-
-### Regeln
-
-- Heimspieler verwenden nur A, B und C.
-- Gastspieler verwenden nur X, Y und Z.
-- Eine Position darf pro Begegnung nur einmal belegt sein.
-- Ein Spieler darf innerhalb derselben Begegnungsaufstellung nicht doppelt eingetragen sein.
-- Die Positionen gelten nur für diese eine Begegnung.
-- Ein Doppelspieler muss nicht zwingend einer der drei Einzelspieler sein.
-- Ein vierter spielberechtigter Spieler darf nur für das Doppel eingesetzt werden.
-
-### Sonderfall: nur zwei Spieler
-
-Wenn eine Mannschaft nur mit zwei statt drei Spielern antritt:
-
-- eine Position bleibt unbesetzt
-- die drei Einzel der fehlenden Position werden forfait verloren
-- das Doppel darf trotzdem mit den zwei anwesenden Spielern gespielt werden
-
-Beispiel Gastmannschaft:
-
-- X = Spieler 1
-- Y = Spieler 2
-- Z = nicht besetzt
-
-Die Einzel gegen Z werden als Forfaitspiele gespeichert.
-
-
-## 32. Begegnungsbemerkung
-
-### Zweck
-
-Speichert Bemerkungen zu einer Begegnung getrennt nach Benutzer und Verantwortungsbereich.
-
-### Felder
-
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| BegegnungsbemerkungID | BIGINT IDENTITY | Nein | PK | 1 |
-| BegegnungID | BIGINT | Nein | FK → Begegnung | 9001 |
-| BenutzerID | INT | Nein | FK → Benutzer | 12 |
-| Bemerkungsart | VARCHAR(20) | Nein | | KLASSENLEITER |
-| Text | NVARCHAR(MAX) | Nein | | Matchblatt geprüft |
-| ErstelltAm | DATETIME2(0) | Nein | | 2026-03-28 10:14:00 |
-
-### Mögliche Werte `Bemerkungsart`
-
-- `VEREIN`
-- `KLASSENLEITER`
-- `ADMIN`
-
-### Regeln
-
-- Zu einer Begegnung können mehrere Bemerkungen gespeichert werden.
-- Verein, Klassenleiter und Admin können getrennte Bemerkungen erfassen.
-- Die Bemerkungen ersetzen kein Änderungsprotokoll.
-- Nachträgliche Änderungen einer genehmigten Begegnung werden separat in `BegegnungAenderung` dokumentiert.
-
-## 33. BegegnungAenderung
-
-### Zweck
-
-Dokumentiert nachträgliche Änderungen an einer bereits genehmigten Begegnung.
-
-Es wird nicht jede alte Feldversion gespeichert, sondern nachvollziehbar gemacht, wer wann und warum eine genehmigte Begegnung geändert hat.
-
-### Felder
-
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| BegegnungAenderungID | BIGINT IDENTITY | Nein | PK | 1 |
-| BegegnungID | BIGINT | Nein | FK → Begegnung | 9001 |
-| BenutzerID | INT | Nein | FK → Benutzer | 12 |
-| Aenderungsdatum | DATETIME2(0) | Nein | | 2026-03-29 14:20:00 |
-| Grund | NVARCHAR(500) | Nein | | Falsches Satzresultat korrigiert |
-
-### Regeln
-
-- Ein Eintrag wird nur bei Änderungen an einer bereits genehmigten Begegnung erzeugt.
-- Nur Klassenleiter oder Admin dürfen eine genehmigte Begegnung ändern.
-- `Grund` ist Pflicht.
-
-## 34. Turnier
-
-### Zweck
-
-Speichert die allgemeinen Stammdaten eines Turniers.
-
-Ein Turnier kann mehrere Kategorien enthalten.
-
-### Felder
-
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| TurnierID | INT IDENTITY | Nein | PK | 1 |
-| SaisonID | INT | Nein | FK → Saison | 1 |
-| BewertungsperiodeID | INT | Nein | FK → Bewertungsperiode | 2 |
-| Turniername | NVARCHAR(150) | Nein | | Heimberg Open 2026 |
-| VeranstalterNr | INT | Nein | FK → Club | 50048 |
-| SpielortID | INT | Nein | FK → Spielort | 1 |
-| Startdatum | DATE | Nein | | 2026-05-12 |
-| Enddatum | DATE | Ja | | 2026-05-12 |
-| Meldeschluss | DATETIME2(0) | Nein | | 2026-05-01 23:59:00 |
-| HallenSchiedsrichterName | NVARCHAR(150) | Ja | | Max Muster |
-| Status | VARCHAR(20) | Nein | | OFFEN |
-
-### Mögliche Werte `Status`
-
-- `GEPLANT`
-- `OFFEN`
-- `AUSGELOST`
-- `LAUFEND`
-- `BEENDET`
-- `ABGESAGT`
-
-### Bedeutung der Statuswerte
-
-- `GEPLANT`: Turnier ist erfasst, Anmeldung noch nicht offen
-- `OFFEN`: Anmeldung ist geöffnet
-- `AUSGELOST`: Anmeldung geschlossen, Auslosung bzw. Einteilung erfolgt
-- `LAUFEND`: Turnier findet aktuell statt
-- `BEENDET`: Turnier abgeschlossen
-- `ABGESAGT`: Turnier findet nicht statt
-
-### Regeln
-
-- Ein Turnier gehört zu genau einer Saison.
-- Für alle Kategorien eines Turniers gilt dieselbe Bewertungsperiode.
-- Die Bewertungsperiode orientiert sich am Turnierdatum.
-- Ein Turnier kann mehrere Kategorien besitzen.
-- Spielerfotos, Clublogos, Hallentische und Tischnummern werden nicht gepflegt.
-- Bei Turnieren reicht es für dieses Projekt, einen Hallenschiedsrichter als optionale Information zu speichern.
-
-## 35. TurnierKategorie
-
-### Zweck
-
-Speichert eine einzelne Konkurrenz bzw. Kategorie eines Turniers.
-
-Eine Kategorie kann über Alter, Klassierung, Elo oder eine Kombination mehrerer Kriterien eingeschränkt werden.
-
-### Felder
-
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| TurnierKategorieID | INT IDENTITY | Nein | PK | 101 |
-| TurnierID | INT | Nein | FK → Turnier | 1 |
-| Bezeichnung | NVARCHAR(150) | Nein | | Herren B Einzel |
-| Kategorieart | VARCHAR(20) | Nein | | KLASSIERUNG |
-| Wettkampfform | VARCHAR(15) | Nein | | EINZEL |
-| Geschlechtskategorie | VARCHAR(10) | Nein | | HERREN |
-| VerwendeteKlassierungsart | VARCHAR(10) | Ja | | HERREN |
-| Alterskategorie | VARCHAR(10) | Ja | FK → Alterskategorie | U19 |
-| Altersregel | VARCHAR(20) | Nein | | BIS_MAXALTER |
-| BevorzugePassendeKategorie | BIT | Nein | | 1 |
-| MinStufenwert | TINYINT | Ja | FK → Klassierungsstufe | 11 |
-| MaxStufenwert | TINYINT | Ja | FK → Klassierungsstufe | 15 |
-| AlleSpielerMuessenKlassierungErfuellen | BIT | Nein | | 1 |
-| MinEloWert | DECIMAL(10,3) | Ja | | 800.000 |
-| TopEloWert | DECIMAL(10,3) | Ja | | 1200.000 |
-| AlleSpielerMuessenEloErfuellen | BIT | Nein | | 1 |
-| SpielerProTeam | TINYINT | Ja | | 2 |
-| MinKlassierungSumme | SMALLINT | Ja | | 15 |
-| MaxKlassierungSumme | SMALLINT | Ja | | 20 |
-| MinEloSumme | DECIMAL(10,3) | Ja | | NULL |
-| MaxEloSumme | DECIMAL(10,3) | Ja | | 2400.000 |
-| Gewinnsaetze | TINYINT | Nein | | 3 |
-| Status | VARCHAR(20) | Nein | | OFFEN |
-
-### Mögliche Werte `Kategorieart`
-
-- `ALTER`
-- `KLASSIERUNG`
-- `ELO`
-- `OFFEN`
-- `KOMBINIERT`
-
-### Mögliche Werte `Wettkampfform`
-
-- `EINZEL`
-- `DOPPEL`
-- `MANNSCHAFT`
-
-### Mögliche Werte `Geschlechtskategorie`
-
-- `HERREN`
-- `DAMEN`
-- `MIXED`
-- `OFFEN`
-
-### Mögliche Werte `VerwendeteKlassierungsart`
-
-- `HERREN`
-- `DAMEN`
-- `NULL`
-
-### Mögliche Werte `Altersregel`
-
-- `ALLE`
-- `BIS_MAXALTER`
-- `AB_MINALTER`
-- `EXAKT`
-
-### Alterslogik
-
-#### Aktive
-
-`Alterskategorie = Aktive` bzw. keine spezielle Altersbegrenzung bedeutet:
-
-- alle Alterskategorien dürfen teilnehmen
-- U-Spieler dürfen teilnehmen
-- Aktive dürfen teilnehmen
-- O-Spieler dürfen teilnehmen
-
-#### Nachwuchs
-
-Beispiel U13:
-
-- U11 darf U13 spielen
-- U13 darf U13 spielen
-- ältere Kategorien nicht
-
-Wenn eine passende U11-Kategorie vorhanden ist, wird diese für einen U11-Spieler bevorzugt, aber die Teilnahme in U13 ist grundsätzlich möglich.
-
-#### Senioren
-
-Beispiel O40:
-
-- O40 darf teilnehmen
-- O50 darf teilnehmen
-- O70 darf teilnehmen
-- O80 darf teilnehmen
-
-Ältere Senioren dürfen also in einer jüngeren Seniorenkategorie spielen.
-
-### Klassierungslogik
-
-- Jeder Spieler besitzt eine Herrenklassierung.
-- Frauen besitzen zusätzlich eine Damenklassierung.
-- Bei Damenkategorien wird die Damenklassierung verwendet.
-- Bei Herren-, Mixed- und offenen Kategorien wird die Herrenklassierung verwendet.
-
-### Beispiele
-
-#### Herren B Einzel
-
-- `Kategorieart = KLASSIERUNG`
-- `Wettkampfform = EINZEL`
-- `Geschlechtskategorie = HERREN`
-- `VerwendeteKlassierungsart = HERREN`
-- `MinStufenwert = 11`
-- `MaxStufenwert = 15`
-
-#### Top 1200 Einzel
-
-- `Kategorieart = ELO`
-- `Wettkampfform = EINZEL`
-- `TopEloWert = 1200`
-
-#### U19 Einzel
-
-- `Kategorieart = ALTER`
-- `Wettkampfform = EINZEL`
-- `Alterskategorie = U19`
-- `Altersregel = BIS_MAXALTER`
-
-#### Doppel C
-
-- `Kategorieart = KLASSIERUNG`
-- `Wettkampfform = DOPPEL`
-- `MaxStufenwert = 10`
-- `AlleSpielerMuessenKlassierungErfuellen = 1`
-
-#### Doppel Top 2400
-
-- `Kategorieart = ELO`
-- `Wettkampfform = DOPPEL`
-- `MaxEloSumme = 2400`
-
-#### Zweiermannschaft Summe 20
-
-- `Kategorieart = KLASSIERUNG`
-- `Wettkampfform = MANNSCHAFT`
-- `SpielerProTeam = 2`
-- `MaxKlassierungSumme = 20`
-
-### Regeln
-
-- Nur gesetzte Kriterien werden geprüft.
-- Bei Doppel- und Mannschaftskategorien können Kriterien pro Spieler oder als Summe gelten.
-- Bei Alterskategorien kann jeder einzelne Spieler geprüft werden.
-- Bei Kategorien mit Elo-Grenze wird der Wert aus `SpielerBewertung` verwendet.
-- Bei Turnieren mit vier Gewinnsätzen kann `Gewinnsaetze = 4` gesetzt werden.
-
-## 36. Einzelanmeldung
-
-### Zweck
-
-Speichert die Anmeldung eines einzelnen Spielers zu einer Turnierkategorie.
-
-Die Zulassung wird anhand der zum Turnier gehörenden Bewertungsperiode geprüft.
-
-### Felder
-
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| EinzelanmeldungID | BIGINT IDENTITY | Nein | PK | 1 |
-| TurnierKategorieID | INT | Nein | FK → TurnierKategorie | 101 |
-| LizenzNr | INT | Nein | FK → Spieler | 512038 |
-| Anmeldedatum | DATETIME2(0) | Nein | | 2026-02-15 18:30:00 |
-| Status | VARCHAR(20) | Nein | | BESTAETIGT |
-| Ablehnungsgrund | NVARCHAR(500) | Ja | | NULL |
-
-### Mögliche Werte `Status`
-
-- `ANGEMELDET`
-- `BESTAETIGT`
-- `ABGELEHNT`
-- `ZURUECKGEZOGEN`
-
-### Regeln
-
-- Die Kategorie muss `Wettkampfform = EINZEL` besitzen.
-- Ein Spieler darf nicht mehrfach in derselben Turnierkategorie angemeldet werden.
-- Elo, Klassierung und Alterskategorie werden nicht zum Anmeldezeitpunkt gespeichert.
-- Die Prüfung verwendet `SpielerBewertung` der Bewertungsperiode des Turniers.
-- Bei einer Ablehnung kann der Grund gespeichert werden.
-
-## 37. Doppelanmeldung
-
-### Zweck
-
-Speichert die Anmeldung eines Doppelpaars zu einer Turnierkategorie.
-
-### Felder
-
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| DoppelanmeldungID | BIGINT IDENTITY | Nein | PK | 1 |
-| TurnierKategorieID | INT | Nein | FK → TurnierKategorie | 201 |
-| Spieler1Lizenz | INT | Nein | FK → Spieler | 512038 |
-| Spieler2Lizenz | INT | Nein | FK → Spieler | 510103 |
-| Anmeldedatum | DATETIME2(0) | Nein | | 2026-02-15 19:00:00 |
-| Status | VARCHAR(20) | Nein | | BESTAETIGT |
-| Ablehnungsgrund | NVARCHAR(500) | Ja | | NULL |
-
-### Regeln
-
-- Die Kategorie muss `Wettkampfform = DOPPEL` besitzen.
-- Spieler 1 und Spieler 2 müssen verschieden sein.
-- Eine Paarung darf nicht doppelt in derselben Kategorie angemeldet werden.
-- Bei Mixed muss die Geschlechterkombination den Regeln entsprechen.
-- Je nach Kategorie können folgende Kriterien geprüft werden:
-  - beide U19
-  - beide maximal C
-  - maximale Elo-Summe
-  - maximale Klassierungssumme
-- Elo, Klassierung und Alterskategorie werden aus `SpielerBewertung` gelesen.
-
-## 38. Turniermannschaft
-
-### Zweck
-
-Speichert eine speziell für ein Turnier gebildete Mannschaft.
-
-Spieler aus unterschiedlichen Clubs dürfen gemeinsam in derselben Turniermannschaft spielen.
-
-### Felder
-
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| TurniermannschaftID | BIGINT IDENTITY | Nein | PK | 1 |
-| TurnierKategorieID | INT | Nein | FK → TurnierKategorie | 301 |
-| Name | NVARCHAR(100) | Nein | | Team Mittelland |
-| Anmeldedatum | DATETIME2(0) | Nein | | 2026-02-20 16:00:00 |
-| Status | VARCHAR(20) | Nein | | BESTAETIGT |
-| Ablehnungsgrund | NVARCHAR(500) | Ja | | NULL |
-
-### Mögliche Werte `Status`
-
-- `ANGEMELDET`
-- `BESTAETIGT`
-- `ABGELEHNT`
-- `ZURUECKGEZOGEN`
-
-### Regeln
-
-- Die Kategorie muss `Wettkampfform = MANNSCHAFT` besitzen.
-- Eine Turniermannschaft gehört nicht zwingend zu einem Club.
-- Spieler verschiedener Clubs dürfen gemeinsam antreten.
-- Deshalb besitzt die Tabelle bewusst keine `VereinsNr`.
-- Die Anzahl der Spieler richtet sich nach `TurnierKategorie.SpielerProTeam`.
-- Die Zulassung wird mit den Werten aus `SpielerBewertung` geprüft.
-
-## 39. TurniermannschaftSpieler
-
-### Zweck
-
-Ordnet Spieler einer Turniermannschaft zu.
-
-### Felder
-
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| TurniermannschaftID | BIGINT | Nein | PK, FK → Turniermannschaft | 1 |
-| LizenzNr | INT | Nein | PK, FK → Spieler | 512038 |
-| Position | TINYINT | Ja | | 1 |
-| IstCaptain | BIT | Nein | | 1 |
-
-### Regeln
-
-- Der Primärschlüssel besteht aus `TurniermannschaftID` und `LizenzNr`.
-- Ein Spieler darf innerhalb derselben Turniermannschaft nur einmal vorkommen.
-- Spieler aus verschiedenen Clubs dürfen gemeinsam antreten.
-- Die Anzahl Spieler muss den Vorgaben der Turnierkategorie entsprechen.
-- Elo, Klassierung und Alterskategorie werden nicht redundant gespeichert.
-- Die Prüfwerte stammen aus `SpielerBewertung`.
-- Je nach Kategorie können Einzelkriterien oder Summenkriterien geprüft werden.
-
-## 40. Einzelspiel
-
-### Zweck
-
-Speichert ein einzelnes Spiel aus einer Ligabegegnung oder einer Turnierkategorie.
-
-Ein Einzel kann regulär gespielt, durch Aufgabe beendet oder forfait gewertet werden.
-
-### Felder
-
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| EinzelspielID | BIGINT IDENTITY | Nein | PK | 10001 |
-| BegegnungID | BIGINT | Ja | FK → Begegnung | 9001 |
-| TurnierKategorieID | INT | Ja | FK → TurnierKategorie | NULL |
-| Spielnummer | TINYINT | Ja | | 1 |
-| Spielcode | VARCHAR(10) | Ja | | A-X |
-| Spieler1Lizenz | INT | Ja | FK → Spieler | 512038 |
-| Spieler2Lizenz | INT | Ja | FK → Spieler | 510101 |
-| GewinnerLizenz | INT | Ja | FK → Spieler | 512038 |
-| Spieldatum | DATETIME2(0) | Nein | | 2026-03-27 19:45:00 |
-| SaetzeSpieler1 | TINYINT | Nein | | 3 |
-| SaetzeSpieler2 | TINYINT | Nein | | 1 |
-| PunkteSpieler1 | TINYINT | Nein | | 1 |
-| PunkteSpieler2 | TINYINT | Nein | | 0 |
-| Spielgrund | VARCHAR(20) | Nein | | REGULAER |
-| Status | VARCHAR(20) | Nein | | ABGESCHLOSSEN |
-
-### Mögliche Werte `Spielgrund`
-
-- `REGULAER`
-- `AUFGABE`
-- `FORFAIT`
-- `NICHTANGETRETEN`
-- `ANNULLIERT`
-
-### Mögliche Werte `Status`
-
-- `GEPLANT`
-- `LAUFEND`
-- `ABGESCHLOSSEN`
-- `ANNULLIERT`
-
-### Herkunft
-
-Ein Einzel gehört entweder zu:
-
-- einer Ligabegegnung über `BegegnungID`
-- oder einer Turnierkategorie über `TurnierKategorieID`
-
-Genau eine der beiden Zuordnungen muss gesetzt sein.
-
-### Spielnummern in einer normalen Ligabegegnung
-
-| Spielnummer | Spielcode |
-|---:|---|
-| 1 | A-X |
-| 2 | B-Y |
-| 3 | C-Z |
-| 4 | B-X |
-| 5 | A-Z |
-| 6 | C-Y |
-| 8 | B-Z |
-| 9 | C-X |
-| 10 | A-Y |
-
-Spielnummer 7 ist das Doppel.
-
-### Elo-Regeln
-
-- `REGULAER` ist Elo-relevant.
-- `AUFGABE` ist Elo-relevant.
-- `FORFAIT` ist nicht Elo-relevant.
-- `NICHTANGETRETEN` ist nicht Elo-relevant.
-- `ANNULLIERT` ist nicht Elo-relevant.
-
-### Forfait
-
-Wenn eine Position nicht besetzt ist, darf die entsprechende Spieler-Lizenz `NULL` sein.
-
-Beispiel:
-
-- Spieler1Lizenz = 512038
-- Spieler2Lizenz = NULL
-- GewinnerLizenz = 512038
-- SaetzeSpieler1 = 3
-- SaetzeSpieler2 = 0
-- PunkteSpieler1 = 1
-- PunkteSpieler2 = 0
-- Spielgrund = FORFAIT
-
-Wenn beide Spieler bekannt sind, aber einer forfait gibt, werden beide Lizenznummern gespeichert.
-
-Auch dann entsteht keine Elo-Veränderung.
-
-### Aufgabe
-
-Bei Aufgabe nach Spielbeginn:
-
-- beide Spieler bleiben gespeichert
-- nur tatsächlich gespielte Sätze werden in `Satz` gespeichert
-- das Spiel bleibt Elo-relevant
-
-### Regeln
-
-- Spieler 1 und Spieler 2 dürfen bei regulären Spielen nicht identisch sein.
-- `GewinnerLizenz` muss bei einem gewerteten Spiel einem der bekannten Spieler entsprechen.
-- Bei regulären Spielen müssen beide Spieler gesetzt sein.
-- Das Satzverhältnis wird über `SaetzeSpieler1` und `SaetzeSpieler2` gespeichert.
-- Die einzelnen Satzresultate werden separat in `Satz` gespeichert.
-
-## 41. Doppelspiel
-
-### Zweck
-
-Speichert ein Doppelspiel aus einer Ligabegegnung oder einer Turnierkategorie.
-
-Die vier Spieler werden direkt im Doppelspiel gespeichert. Eine separate Stammdatentabelle für Doppelpaarungen wird nicht verwendet.
-
-### Felder
-
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| DoppelspielID | BIGINT IDENTITY | Nein | PK | 20001 |
-| BegegnungID | BIGINT | Ja | FK → Begegnung | 9001 |
-| TurnierKategorieID | INT | Ja | FK → TurnierKategorie | NULL |
-| Spielnummer | TINYINT | Ja | | 7 |
-| Spielcode | VARCHAR(10) | Ja | | DOPPEL |
-| Seite1Spieler1Lizenz | INT | Ja | FK → Spieler | 512038 |
-| Seite1Spieler2Lizenz | INT | Ja | FK → Spieler | 510101 |
-| Seite2Spieler1Lizenz | INT | Ja | FK → Spieler | 520001 |
-| Seite2Spieler2Lizenz | INT | Ja | FK → Spieler | 520002 |
-| Gewinnerseite | TINYINT | Ja | | 1 |
-| Spieldatum | DATETIME2(0) | Nein | | 2026-03-27 20:30:00 |
-| SaetzeSeite1 | TINYINT | Nein | | 3 |
-| SaetzeSeite2 | TINYINT | Nein | | 2 |
-| PunkteSeite1 | TINYINT | Nein | | 1 |
-| PunkteSeite2 | TINYINT | Nein | | 0 |
-| Spielgrund | VARCHAR(20) | Nein | | REGULAER |
-| Status | VARCHAR(20) | Nein | | ABGESCHLOSSEN |
-
-### Mögliche Werte `Gewinnerseite`
-
-- `1`
-- `2`
-- `NULL`
-
-### Mögliche Werte `Spielgrund`
-
-- `REGULAER`
-- `AUFGABE`
-- `FORFAIT`
-- `NICHTANGETRETEN`
-- `ANNULLIERT`
-
-### Herkunft
-
-Ein Doppelspiel gehört entweder zu:
-
-- einer Ligabegegnung
-- oder einer Turnierkategorie
-
-Genau eine Herkunft muss gesetzt sein.
-
-### Ligabegegnung
-
-In einer normalen Begegnung gilt:
-
-- Spielnummer = 7
-- Spielcode = DOPPEL
-
-### Forfait
-
-Bei einem Forfait dürfen Spieler-Lizenzen `NULL` sein.
-
-Beispiel:
-
-- Seite1Spieler1Lizenz = 512038
-- Seite1Spieler2Lizenz = 510101
-- Seite2Spieler1Lizenz = NULL
-- Seite2Spieler2Lizenz = NULL
-- Gewinnerseite = 1
-- SaetzeSeite1 = 3
-- SaetzeSeite2 = 0
-- PunkteSeite1 = 1
-- PunkteSeite2 = 0
-- Spielgrund = FORFAIT
-
-Wenn die forfaitgebenden Spieler bekannt sind, dürfen deren Lizenznummern trotzdem gespeichert werden.
-
-### Regeln
-
-- Bei einem regulären Doppel müssen alle vier Spieler gesetzt sein.
-- Alle vier Spieler müssen bei einem regulären Doppel verschieden sein.
-- Ein vierter Spieler darf ausschließlich für das Doppel eingesetzt werden, sofern er spielberechtigt ist.
-- Das Satzverhältnis wird über `SaetzeSeite1` und `SaetzeSeite2` gespeichert.
-- Die einzelnen Satzresultate werden in `Satz` gespeichert.
-- Doppelspiele verändern den Elo-Wert nicht.
-- Punkte pro Seite werden gespeichert, damit das Matchblatt vollständig abgebildet werden kann.
-
-## 42. Satz
-
-### Zweck
-
-Speichert die tatsächlich gespielten Punkte eines einzelnen Satzes.
-
-Die Tabelle wird sowohl für Einzel- als auch für Doppelspiele verwendet.
-
-### Felder
-
-| Feld | Datentyp | Null | Schlüssel | Beispiel |
-|---|---|---|---|---|
-| SatzID | BIGINT IDENTITY | Nein | PK | 1 |
-| EinzelspielID | BIGINT | Ja | FK → Einzelspiel | 10001 |
-| DoppelspielID | BIGINT | Ja | FK → Doppelspiel | NULL |
-| SatzNummer | TINYINT | Nein | | 1 |
-| PunkteSeite1 | TINYINT | Nein | | 11 |
-| PunkteSeite2 | TINYINT | Nein | | 8 |
-
-### Beispiel Einzelspiel
-
-| SatzNummer | PunkteSeite1 | PunkteSeite2 |
-|---:|---:|---:|
-| 1 | 11 | 8 |
-| 2 | 9 | 11 |
-| 3 | 11 | 6 |
-| 4 | 11 | 7 |
-
-Daraus ergibt sich:
-
-- Satzverhältnis = 3:1
-- Punkteverhältnis = 42:32
-
-### Beispiel Doppelspiel
-
-| SatzNummer | PunkteSeite1 | PunkteSeite2 |
-|---:|---:|---:|
-| 1 | 9 | 11 |
-| 2 | 8 | 11 |
-| 3 | 11 | 6 |
-| 4 | 12 | 10 |
-| 5 | 9 | 11 |
-
-Daraus ergibt sich:
-
-- Satzverhältnis = 2:3
-- Punkteverhältnis = 49:49
-
-### Regeln
-
-- Genau einer der beiden Fremdschlüssel `EinzelspielID` oder `DoppelspielID` muss gesetzt sein.
-- Ein Satz gehört entweder zu einem Einzel oder zu einem Doppel.
-- `SatzNummer` muss innerhalb eines Spiels eindeutig sein.
-- Bei normalen Spielen mit drei Gewinnsätzen gibt es maximal fünf Sätze.
-- Bei Turnieren mit vier Gewinnsätzen sind maximal sieben Sätze möglich.
-- Die zulässige Anzahl Gewinnsätze wird über `TurnierKategorie.Gewinnsaetze` bestimmt.
-- Bei Ligaspielen gelten drei Gewinnsätze.
-- Bei Forfait werden keine künstlichen Satzpunkte gespeichert.
-- Ein Forfait kann trotzdem ein gewertetes Satzverhältnis von 3:0 im Einzel- oder Doppelspiel besitzen.
-- Bei Aufgabe werden nur die tatsächlich gespielten Sätze gespeichert.
+Die detaillierte technische Beschreibung der Integritätsregeln befindet
+sich in `Constraints.md`. Geschäftsregeln werden ergänzend in
+`Geschaeftsregeln.md` beschrieben.

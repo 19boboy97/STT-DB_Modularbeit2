@@ -1,15 +1,23 @@
 # Constraints
 
-Dieses Dokument beschreibt die technischen Datenbankregeln der STT-Datenbank.
+## 1. Zweck
 
-Verwendete Constraint-Arten:
+Dieses Dokument beschreibt die im finalen SQL-Schema tatsächlich implementierten Integritätsregeln der STT-Datenbank.
+
+Berücksichtigt werden:
 
 - `PRIMARY KEY`
 - `FOREIGN KEY`
 - `UNIQUE`
 - `CHECK`
+- gefilterte `UNIQUE INDEX`-Regeln
+- relevante `DEFAULT`-Constraints
 
-## 1. Saison
+Die technische Referenz sind die finalen `CREATE TABLE`-Skripte im Ordner `sql/tables`.
+
+---
+
+## 2. Saison
 
 ### PRIMARY KEY
 
@@ -23,33 +31,21 @@ Verwendete Constraint-Arten:
 
 - `Enddatum > Startdatum`
 
-### Besonderheit
+### DEFAULT
 
-Es darf höchstens eine Saison mit `IstAktuell = 1` geben.
+- `IstAktuell = 0`
 
-Dies wird später über einen gefilterten UNIQUE-Index umgesetzt.
+### Gefilterter UNIQUE-Index
 
-## 2. Verband
+- `UX_Saison_IstAktuell`
+- Spalte: `IstAktuell`
+- Filter: `IstAktuell = 1`
 
-### PRIMARY KEY
+Dadurch kann höchstens eine Saison gleichzeitig als aktuell markiert sein.
 
-- `VerbandID`
+---
 
-### FOREIGN KEY
-
-- `UebergeordneterVerbandID` → `Verband.VerbandID`
-
-### UNIQUE
-
-- `Kurzname`
-
-### CHECK
-
-- `Verbandstyp IN ('NATIONAL', 'REGIONAL')`
-- Bei `NATIONAL` muss `UebergeordneterVerbandID` NULL sein.
-- Bei `REGIONAL` muss `UebergeordneterVerbandID` gesetzt sein.
-
-## 2. Verband
+## 3. Verband
 
 ### PRIMARY KEY
 
@@ -66,113 +62,16 @@ Dies wird später über einen gefilterten UNIQUE-Index umgesetzt.
 ### CHECK
 
 - `Verbandstyp IN ('NATIONAL', 'REGIONAL')`
-- Bei `NATIONAL` muss `UebergeordneterVerbandID` NULL sein.
-- Bei `REGIONAL` muss `UebergeordneterVerbandID` gesetzt sein.
+- `NATIONAL` verlangt `UebergeordneterVerbandID IS NULL`
+- `REGIONAL` verlangt `UebergeordneterVerbandID IS NOT NULL`
 
-## 3. Club
+### DEFAULT
 
-### PRIMARY KEY
+- `Aktiv = 1`
 
-- `VereinsNr`
+---
 
-### FOREIGN KEY
-
-- `RegionalverbandID` → `Verband.VerbandID`
-
-### CHECK
-
-- `Gruendungsjahr` muss NULL oder sinnvoll positiv sein.
-- `Landcode` besteht aus zwei Zeichen.
-
-### Hinweis
-
-`Clubname` und `Kurzname` müssen nicht zwingend UNIQUE sein.
-
-## 4. Spielort
-
-### PRIMARY KEY
-
-- `SpielortID`
-
-### FOREIGN KEY
-
-- `VereinsNr` → `Club.VereinsNr`
-
-### UNIQUE
-
-Sinnvoll:
-
-- Kombination aus `VereinsNr` und `Bezeichnung`
-
-### CHECK
-
-- `IstHauptspielort IN (0,1)`
-- `Aktiv IN (0,1)`
-
-### Besonderheit
-
-Pro Club sollte höchstens ein aktiver Hauptspielort existieren.
-
-Dies wird später über einen gefilterten UNIQUE-Index umgesetzt.
-
-## 5. Spieler
-
-### PRIMARY KEY
-
-- `LizenzNr`
-
-### CHECK
-
-- `Geschlecht IN ('M', 'W')`
-- `Aktiv IN (0,1)`
-
-## 6. SpielerSaison
-
-### PRIMARY KEY
-
-Zusammengesetzter Primärschlüssel:
-
-- `LizenzNr`
-- `SaisonID`
-
-### FOREIGN KEY
-
-- `LizenzNr` → `Spieler.LizenzNr`
-- `SaisonID` → `Saison.SaisonID`
-- `Alterskategorie` → `Alterskategorie.Bezeichnung`
-
-### CHECK
-
-- `LizenzAktiv IN (0,1)`
-
-## 7. SpielerVerein
-
-### PRIMARY KEY
-
-- `SpielerVereinID`
-
-### FOREIGN KEY
-
-- `LizenzNr` → `Spieler.LizenzNr`
-- `SaisonID` → `Saison.SaisonID`
-- `VereinsNr` → `Club.VereinsNr`
-
-### UNIQUE
-
-- Kombination aus `LizenzNr`, `SaisonID`, `VereinsNr`, `Zuordnungsart`, `Wettbewerbsbereich`
-
-### CHECK
-
-- `Zuordnungsart IN ('HAUPTVEREIN', 'MEHRFACHLIZENZ')`
-- `Wettbewerbsbereich IN ('ALLE', 'HERREN', 'DAMEN', 'NACHWUCHS', 'SENIOREN')`
-
-### Besonderheit
-
-Pro Spieler und Saison darf nur ein Hauptverein existieren.
-
-Dies wird später über einen gefilterten UNIQUE-Index umgesetzt.
-
-## 8. Alterskategorie
+## 4. Alterskategorie
 
 ### PRIMARY KEY
 
@@ -183,7 +82,9 @@ Dies wird später über einen gefilterten UNIQUE-Index umgesetzt.
 - `MinAlter >= 0`
 - `MaxAlter IS NULL OR MaxAlter >= MinAlter`
 
-## 9. Klassierungsstufe
+---
+
+## 5. Klassierungsstufe
 
 ### PRIMARY KEY
 
@@ -197,33 +98,133 @@ Dies wird später über einen gefilterten UNIQUE-Index umgesetzt.
 
 - `Stufenwert BETWEEN 1 AND 22`
 
-## 10. Klassierungsgrenze
+---
+
+## 6. Club
 
 ### PRIMARY KEY
 
-- `KlassierungsgrenzeID`
+- `VereinsNr`
 
 ### FOREIGN KEY
 
-- `BewertungsperiodeID` → `Bewertungsperiode.BewertungsperiodeID`
-- `Stufenwert` → `Klassierungsstufe.Stufenwert`
-
-### UNIQUE
-
-- Kombination aus `BewertungsperiodeID`, `Stufenwert`, `Klassierungsart`
+- `RegionalverbandID` → `Verband.VerbandID`
 
 ### CHECK
 
-- `Klassierungsart IN ('HERREN', 'DAMEN')`
-- `MinElo IS NULL OR MaxElo IS NULL OR MinElo <= MaxElo`
-- `MittelElo IS NULL OR MinElo IS NULL OR MittelElo >= MinElo`
-- `MittelElo IS NULL OR MaxElo IS NULL OR MittelElo <= MaxElo`
+- `Gruendungsjahr IS NULL OR Gruendungsjahr > 0`
+- `LEN(Landcode) = 2`
 
-### Besonderheit
+### DEFAULT
 
-Die Elo-Bereiche einer Klassierungsart dürfen sich innerhalb derselben Bewertungsperiode nicht überschneiden.
+- `Landcode = 'CH'`
+- `Aktiv = 1`
 
-Diese Regel wird später entweder über eine Stored Procedure oder durch kontrollierte Stammdatenpflege abgesichert.
+---
+
+## 7. Spielort
+
+### PRIMARY KEY
+
+- `SpielortID`
+
+### FOREIGN KEY
+
+- `VereinsNr` → `Club.VereinsNr`
+
+### UNIQUE
+
+- Kombination aus `VereinsNr` und `Bezeichnung`
+
+### DEFAULT
+
+- `Landcode = 'CH'`
+- `IstHauptspielort = 0`
+- `Aktiv = 1`
+
+### Gefilterter UNIQUE-Index
+
+- `UX_Spielort_AktiverHauptspielort`
+- Schlüssel: `VereinsNr`
+- Filter: `IstHauptspielort = 1 AND Aktiv = 1`
+
+Dadurch kann ein Club höchstens einen aktiven Hauptspielort besitzen.
+
+---
+
+## 8. Spieler
+
+### PRIMARY KEY
+
+- `LizenzNr`
+
+### CHECK
+
+- `Geschlecht IN ('M', 'W')`
+
+### DEFAULT
+
+- `Aktiv = 1`
+
+---
+
+## 9. SpielerSaison
+
+### PRIMARY KEY
+
+Zusammengesetzt aus:
+
+- `LizenzNr`
+- `SaisonID`
+
+### FOREIGN KEY
+
+- `LizenzNr` → `Spieler.LizenzNr`
+- `SaisonID` → `Saison.SaisonID`
+- `Alterskategorie` → `Alterskategorie.Bezeichnung`
+
+### DEFAULT
+
+- `LizenzAktiv = 1`
+
+---
+
+## 10. SpielerVerein
+
+### PRIMARY KEY
+
+- `SpielerVereinID`
+
+### FOREIGN KEY
+
+- `LizenzNr` → `Spieler.LizenzNr`
+- `SaisonID` → `Saison.SaisonID`
+- `VereinsNr` → `Club.VereinsNr`
+
+### UNIQUE
+
+Kombination aus:
+
+- `LizenzNr`
+- `SaisonID`
+- `VereinsNr`
+- `Zuordnungsart`
+- `Wettbewerbsbereich`
+
+### CHECK
+
+- `Zuordnungsart IN ('HAUPTVEREIN', 'MEHRFACHLIZENZ')`
+- `Wettbewerbsbereich IN ('ALLE', 'HERREN', 'DAMEN', 'NACHWUCHS', 'SENIOREN')`
+
+### Gefilterter UNIQUE-Index
+
+- `UX_SpielerVerein_Hauptverein`
+- Schlüssel: `LizenzNr`, `SaisonID`
+- Filter: `Zuordnungsart = 'HAUPTVEREIN'`
+
+Damit kann ein Spieler innerhalb einer Saison höchstens einen Hauptverein besitzen.
+
+---
 
 ## 11. Bewertungsperiode
 
@@ -245,14 +246,39 @@ Diese Regel wird später entweder über eine Stored Procedure oder durch kontrol
 - `GueltigBis >= GueltigAb`
 - `Stichtag BETWEEN GueltigAb AND GueltigBis`
 
-### Besonderheit
+---
 
-Pro Saison sollen genau zwei Bewertungsperioden existieren:
+## 12. Klassierungsgrenze
 
-- `SAISONBEGINN`
-- `SAISONMITTE`
+### PRIMARY KEY
 
-## 12. SpielerBewertung
+- `KlassierungsgrenzeID`
+
+### FOREIGN KEY
+
+- `BewertungsperiodeID` → `Bewertungsperiode.BewertungsperiodeID`
+- `Stufenwert` → `Klassierungsstufe.Stufenwert`
+
+### UNIQUE
+
+Kombination aus:
+
+- `BewertungsperiodeID`
+- `Stufenwert`
+- `Klassierungsart`
+
+### CHECK
+
+- `Klassierungsart IN ('HERREN', 'DAMEN')`
+- `MinElo IS NULL OR MaxElo IS NULL OR MinElo <= MaxElo`
+- `MittelElo IS NULL OR MinElo IS NULL OR MittelElo >= MinElo`
+- `MittelElo IS NULL OR MaxElo IS NULL OR MittelElo <= MaxElo`
+
+Hinweis: Eine vollständige Prüfung auf sich überschneidende Elo-Bereiche zwischen verschiedenen Datensätzen wird durch diese Tabellen-Constraints nicht erzwungen.
+
+---
+
+## 13. SpielerBewertung
 
 ### PRIMARY KEY
 
@@ -274,7 +300,31 @@ Pro Saison sollen genau zwei Bewertungsperioden existieren:
 
 - `Elo >= 0`
 
-## 13. SpielerElo
+### DEFAULT
+
+- `ErstelltAm = SYSDATETIME()`
+
+---
+
+## 14. EloMonatslauf
+
+### PRIMARY KEY
+
+- `EloMonatslaufID`
+
+### UNIQUE
+
+- `Berechnungsdatum`
+
+### CHECK
+
+- `PeriodeBis >= PeriodeVon`
+- `Status IN ('GEPLANT', 'LAUFEND', 'ABGESCHLOSSEN', 'FEHLER')`
+- `AbgeschlossenAm IS NULL OR GestartetAm IS NULL OR AbgeschlossenAm >= GestartetAm`
+
+---
+
+## 15. SpielerElo
 
 ### PRIMARY KEY
 
@@ -298,23 +348,9 @@ Pro Saison sollen genau zwei Bewertungsperioden existieren:
 - `Gesamtrang IS NULL OR Gesamtrang > 0`
 - `GueltigBis IS NULL OR GueltigBis >= GueltigAb`
 
-## 14. EloMonatslauf
+---
 
-### PRIMARY KEY
-
-- `EloMonatslaufID`
-
-### UNIQUE
-
-- `Berechnungsdatum`
-
-### CHECK
-
-- `PeriodeBis >= PeriodeVon`
-- `Status IN ('GEPLANT', 'LAUFEND', 'ABGESCHLOSSEN', 'FEHLER')`
-- `AbgeschlossenAm IS NULL OR GestartetAm IS NULL OR AbgeschlossenAm >= GestartetAm`
-
-## 15. EloProtokoll
+## 16. EloProtokoll
 
 ### PRIMARY KEY
 
@@ -339,7 +375,13 @@ Pro Saison sollen genau zwei Bewertungsperioden existieren:
 - `Gewinnwahrscheinlichkeit BETWEEN 0 AND 1`
 - `VorschauElo >= 0`
 
-## 16. Funktion
+### DEFAULT
+
+- `ErstelltAm = SYSDATETIME()`
+
+---
+
+## 17. Funktion
 
 ### PRIMARY KEY
 
@@ -349,11 +391,13 @@ Pro Saison sollen genau zwei Bewertungsperioden existieren:
 
 - `Bezeichnung`
 
-### CHECK
+### DEFAULT
 
-- `Aktiv IN (0,1)`
+- `Aktiv = 1`
 
-## 17. Vereinsfunktionaer
+---
+
+## 18. Vereinsfunktionaer
 
 ### PRIMARY KEY
 
@@ -363,15 +407,17 @@ Pro Saison sollen genau zwei Bewertungsperioden existieren:
 
 - `VereinsNr` → `Club.VereinsNr`
 
-### CHECK
+### DEFAULT
 
-- `Aktiv IN (0,1)`
+- `Aktiv = 1`
 
-## 18. FunktionaerFunktion
+---
+
+## 19. FunktionaerFunktion
 
 ### PRIMARY KEY
 
-Zusammengesetzter Primärschlüssel:
+Zusammengesetzt aus:
 
 - `FunktionaerID`
 - `FunktionID`
@@ -386,7 +432,9 @@ Zusammengesetzter Primärschlüssel:
 
 - `GueltigBis IS NULL OR GueltigBis >= GueltigAb`
 
-## 19. Benutzer
+---
+
+## 20. Benutzer
 
 ### PRIMARY KEY
 
@@ -405,70 +453,14 @@ Zusammengesetzter Primärschlüssel:
 ### CHECK
 
 - `Rolle IN ('CAPTAIN', 'VEREIN', 'KLASSENLEITER', 'ADMIN')`
-- `Aktiv IN (0,1)`
 
-### Besonderheit
+### DEFAULT
 
-Je nach Rolle gelten zusätzliche fachliche Regeln:
+- `Aktiv = 1`
 
-- `CAPTAIN` sollte eine `LizenzNr` besitzen.
-- `VEREIN` sollte eine `VereinsNr` besitzen.
-- `KLASSENLEITER` kann eine `VerbandID` besitzen.
-- `ADMIN` benötigt keine dieser Zuordnungen.
+Hinweis: Rollenabhängige Anforderungen wie „CAPTAIN benötigt eine Lizenznummer“ werden nicht vollständig durch einen CHECK-Constraint erzwungen.
 
-Diese rollenabhängigen Regeln werden später über Stored Procedures oder zusätzliche CHECK-Constraints abgesichert.
-
-## 19. Benutzer
-
-### PRIMARY KEY
-
-- `BenutzerID`
-
-### FOREIGN KEY
-
-- `LizenzNr` → `Spieler.LizenzNr`
-- `VereinsNr` → `Club.VereinsNr`
-- `VerbandID` → `Verband.VerbandID`
-
-### UNIQUE
-
-- `Benutzername`
-
-### CHECK
-
-- `Rolle IN ('CAPTAIN', 'VEREIN', 'KLASSENLEITER', 'ADMIN')`
-- `Aktiv IN (0,1)`
-
-### Besonderheit
-
-Je nach Rolle gelten zusätzliche fachliche Regeln:
-
-- `CAPTAIN` sollte eine `LizenzNr` besitzen.
-- `VEREIN` sollte eine `VereinsNr` besitzen.
-- `KLASSENLEITER` kann eine `VerbandID` besitzen.
-- `ADMIN` benötigt keine dieser Zuordnungen.
-
-Diese rollenabhängigen Regeln werden später über Stored Procedures oder zusätzliche CHECK-Constraints abgesichert.
-
-## 20. BenutzerMannschaft
-
-### PRIMARY KEY
-
-Zusammengesetzter Primärschlüssel:
-
-- `BenutzerID`
-- `MannschaftID`
-
-### FOREIGN KEY
-
-- `BenutzerID` → `Benutzer.BenutzerID`
-- `MannschaftID` → `Mannschaft.MannschaftID`
-
-### Besonderheit
-
-Der zugeordnete Benutzer sollte die Rolle `CAPTAIN` besitzen.
-
-Diese Regel wird später über eine Stored Procedure geprüft.
+---
 
 ## 21. Ball
 
@@ -478,11 +470,17 @@ Diese Regel wird später über eine Stored Procedure geprüft.
 
 ### UNIQUE
 
-- Kombination aus `Marke`, `Modell`, `Farbe`
+Kombination aus:
 
-### CHECK
+- `Marke`
+- `Modell`
+- `Farbe`
 
-- `Aktiv IN (0,1)`
+### DEFAULT
+
+- `Aktiv = 1`
+
+---
 
 ## 22. Spielsystem
 
@@ -501,7 +499,12 @@ Diese Regel wird später über eine Stored Procedure geprüft.
 - `AnzahlDoppel >= 0`
 - `MaxAnzahlSpiele > 0`
 - `MaxAnzahlSpiele = AnzahlEinzel + AnzahlDoppel`
-- `Aktiv IN (0,1)`
+
+### DEFAULT
+
+- `Aktiv = 1`
+
+---
 
 ## 23. Ligawettbewerb
 
@@ -518,19 +521,25 @@ Diese Regel wird später über eine Stored Procedure geprüft.
 
 ### UNIQUE
 
-Sinnvoll:
+Kombination aus:
 
-- Kombination aus `SaisonID`, `VerbandID`, `Bezeichnung`, `Geschlechtskategorie`, `Alterskategorie`
+- `SaisonID`
+- `VerbandID`
+- `Bezeichnung`
+- `Geschlechtskategorie`
+- `Alterskategorie`
 
 ### CHECK
 
 - `Geschlechtskategorie IN ('HERREN', 'DAMEN')`
-- `Aktiv IN (0,1)`
 
-### Besonderheit
+### DEFAULT
 
-- `Alterskategorie = NULL` bedeutet keine spezielle Altersbeschränkung.
-- Altersberechtigungen wie U13, O40 oder Aktive werden später über Fachlogik geprüft.
+- `Aktiv = 1`
+
+Hinweis: Da `Alterskategorie` nullable ist, ist die SQL-Server-NULL-Semantik bei der Eindeutigkeitsregel zu berücksichtigen.
+
+---
 
 ## 24. Ligaphase
 
@@ -545,20 +554,17 @@ Sinnvoll:
 
 ### UNIQUE
 
-Sinnvoll:
-
-- Kombination aus `LigawettbewerbID`, `Bezeichnung`
+- Kombination aus `LigawettbewerbID` und `Bezeichnung`
 
 ### CHECK
 
 - `Phasentyp IN ('HAUPTRUNDE', 'VORRUNDE', 'FINALRUNDE')`
-- `Aktiv IN (0,1)`
 
-### Besonderheit
+### DEFAULT
 
-Ein `KlassenleiterBenutzerID` sollte auf einen Benutzer mit Rolle `KLASSENLEITER` oder `ADMIN` zeigen.
+- `Aktiv = 1`
 
-Diese Regel wird später über eine Stored Procedure geprüft.
+---
 
 ## 25. Mannschaft
 
@@ -575,18 +581,21 @@ Diese Regel wird später über eine Stored Procedure geprüft.
 
 ### UNIQUE
 
-- Kombination aus `LigaphaseID`, `VereinsNr`, `MannschaftNummer`
+Kombination aus:
+
+- `LigaphaseID`
+- `VereinsNr`
+- `MannschaftNummer`
 
 ### CHECK
 
 - `MannschaftNummer > 0`
-- `Aktiv IN (0,1)`
 
-### Besonderheit
+### DEFAULT
 
-- Der Captain muss eine gültige Lizenz besitzen.
-- Der Captain sollte für diese Mannschaft spielberechtigt sein.
-- Diese fachliche Prüfung wird später über eine Stored Procedure umgesetzt.
+- `Aktiv = 1`
+
+---
 
 ## 26. MannschaftSpieler
 
@@ -601,22 +610,40 @@ Diese Regel wird später über eine Stored Procedure geprüft.
 
 ### UNIQUE
 
-- Kombination aus `MannschaftID`, `LizenzNr`
+- Kombination aus `MannschaftID` und `LizenzNr`
 
 ### CHECK
 
 - `Meldungsart IN ('STAMMSPIELER', 'ERSATZSPIELER')`
 - `StammPosition IS NULL OR StammPosition BETWEEN 1 AND 3`
-- `Spielberechtigt IN (0,1)`
+- `STAMMSPIELER` verlangt `StammPosition BETWEEN 1 AND 3`
+- `ERSATZSPIELER` verlangt `StammPosition IS NULL`
 
-### Besonderheit
+### DEFAULT
 
-- `STAMMSPIELER` sollte eine Stammposition 1 bis 3 besitzen.
-- `ERSATZSPIELER` sollte normalerweise `StammPosition = NULL` haben.
-- Ein Ersatzspieler wird nach dem dritten Einsatz Stammspieler.
-- Die Einsatzanzahl wird aus den tatsächlichen Begegnungen berechnet.
+- `Spielberechtigt = 1`
 
-## 27. Begegnung
+---
+
+## 27. BenutzerMannschaft
+
+### PRIMARY KEY
+
+Zusammengesetzt aus:
+
+- `BenutzerID`
+- `MannschaftID`
+
+### FOREIGN KEY
+
+- `BenutzerID` → `Benutzer.BenutzerID`
+- `MannschaftID` → `Mannschaft.MannschaftID`
+
+Die Tabelle selbst erzwingt nicht, dass der Benutzer tatsächlich die Rolle `CAPTAIN` besitzt.
+
+---
+
+## 28. Begegnung
 
 ### PRIMARY KEY
 
@@ -644,17 +671,25 @@ Diese Regel wird später über eine Stored Procedure geprüft.
 - `BaelleHeim IS NULL OR BaelleHeim >= 0`
 - `BaelleGast IS NULL OR BaelleGast >= 0`
 - `ZuschauerAnzahl IS NULL OR ZuschauerAnzahl >= 0`
-- `MatchblattGenehmigt IN (0,1)`
 - `Status IN ('GEPLANT', 'LAUFEND', 'ABGESCHLOSSEN', 'GENEHMIGT', 'ANNULLIERT')`
 
-### Besonderheiten
+### Genehmigungsregel
 
-- Beide Mannschaften müssen zur gleichen Ligaphase gehören.
-- Die Mannschaftspunktelogik wird über eine Funktion oder Stored Procedure berechnet.
-- Bei Status `GENEHMIGT` sollten `MatchblattGenehmigt = 1`, `GenehmigtAm` und `GenehmigtVon` gesetzt sein.
-- Captain und Verein dürfen genehmigte Begegnungen nicht mehr ändern.
+Wenn `Status = 'GENEHMIGT'`, müssen gleichzeitig gelten:
 
-## 28. Begegnungsaufstellung
+- `MatchblattGenehmigt = 1`
+- `GenehmigtAm IS NOT NULL`
+- `GenehmigtVon IS NOT NULL`
+
+Wenn der Status nicht `GENEHMIGT` ist, darf `MatchblattGenehmigt = 0` sein oder bereits auf `1` stehen, sofern Genehmigungszeitpunkt und Benutzer vorhanden sind.
+
+### DEFAULT
+
+- `MatchblattGenehmigt = 0`
+
+---
+
+## 29. Begegnungsaufstellung
 
 ### PRIMARY KEY
 
@@ -668,22 +703,19 @@ Diese Regel wird später über eine Stored Procedure geprüft.
 
 ### UNIQUE
 
-- Kombination aus `BegegnungID`, `Position`
-- Kombination aus `BegegnungID`, `LizenzNr`
+- Kombination aus `BegegnungID` und `Position`
+- Kombination aus `BegegnungID` und `LizenzNr`
 
 ### CHECK
 
 - `Seite IN ('HEIM', 'GAST')`
 - `Position IN ('A', 'B', 'C', 'X', 'Y', 'Z')`
-- Bei `Seite = 'HEIM'` muss `Position IN ('A','B','C')` sein.
-- Bei `Seite = 'GAST'` muss `Position IN ('X','Y','Z')` sein.
+- `HEIM` erlaubt nur `A`, `B`, `C`
+- `GAST` erlaubt nur `X`, `Y`, `Z`
 
-### Besonderheit
+---
 
-- Wenn eine Position nicht besetzt ist, wird kein Aufstellungsdatensatz angelegt.
-- Die daraus entstehenden Einzelspiele werden als Forfait mit `NULL`-Lizenz gespeichert.
-
-## 29. Begegnungsbemerkung
+## 30. Begegnungsbemerkung
 
 ### PRIMARY KEY
 
@@ -698,7 +730,13 @@ Diese Regel wird später über eine Stored Procedure geprüft.
 
 - `Bemerkungsart IN ('VEREIN', 'KLASSENLEITER', 'ADMIN')`
 
-## 30. BegegnungAenderung
+### DEFAULT
+
+- `ErstelltAm = SYSDATETIME()`
+
+---
+
+## 31. BegegnungAenderung
 
 ### PRIMARY KEY
 
@@ -713,12 +751,13 @@ Diese Regel wird später über eine Stored Procedure geprüft.
 
 - `LEN(LTRIM(RTRIM(Grund))) > 0`
 
-### Besonderheit
+### DEFAULT
 
-- Ein Eintrag wird nur bei Änderungen einer genehmigten Begegnung erzeugt.
-- Nur Benutzer mit Rolle `KLASSENLEITER` oder `ADMIN` dürfen solche Änderungen durchführen.
+- `Aenderungsdatum = SYSDATETIME()`
 
-## 31. Turnier
+---
+
+## 32. Turnier
 
 ### PRIMARY KEY
 
@@ -734,16 +773,14 @@ Diese Regel wird später über eine Stored Procedure geprüft.
 ### CHECK
 
 - `Enddatum IS NULL OR Enddatum >= Startdatum`
-- `Meldeschluss <= Startdatum`
+- `Meldeschluss <= CAST(Startdatum AS DATETIME2(0))`
 - `Status IN ('GEPLANT', 'OFFEN', 'AUSGELOST', 'LAUFEND', 'BEENDET', 'ABGESAGT')`
 
-### Besonderheiten
+Die Tabelle selbst erzwingt nicht, dass Bewertungsperiode und Saison fachlich zusammenpassen oder dass der Spielort zum Veranstalter gehört.
 
-- Die Bewertungsperiode muss zur Saison des Turniers gehören.
-- Der Spielort sollte zum veranstaltenden Club gehören.
-- Diese fachlichen Regeln werden später über Stored Procedures geprüft.
+---
 
-## 32. TurnierKategorie
+## 33. TurnierKategorie
 
 ### PRIMARY KEY
 
@@ -758,8 +795,6 @@ Diese Regel wird später über eine Stored Procedure geprüft.
 
 ### UNIQUE
 
-Sinnvoll:
-
 - Kombination aus `TurnierID` und `Bezeichnung`
 
 ### CHECK
@@ -769,9 +804,6 @@ Sinnvoll:
 - `Geschlechtskategorie IN ('HERREN', 'DAMEN', 'MIXED', 'OFFEN')`
 - `VerwendeteKlassierungsart IS NULL OR VerwendeteKlassierungsart IN ('HERREN', 'DAMEN')`
 - `Altersregel IN ('ALLE', 'BIS_MAXALTER', 'AB_MINALTER', 'EXAKT')`
-- `BevorzugePassendeKategorie IN (0,1)`
-- `AlleSpielerMuessenKlassierungErfuellen IN (0,1)`
-- `AlleSpielerMuessenEloErfuellen IN (0,1)`
 - `MinStufenwert IS NULL OR MaxStufenwert IS NULL OR MinStufenwert <= MaxStufenwert`
 - `MinEloWert IS NULL OR TopEloWert IS NULL OR MinEloWert <= TopEloWert`
 - `MinKlassierungSumme IS NULL OR MaxKlassierungSumme IS NULL OR MinKlassierungSumme <= MaxKlassierungSumme`
@@ -780,14 +812,17 @@ Sinnvoll:
 - `Gewinnsaetze IN (3,4)`
 - `Status IN ('GEPLANT', 'OFFEN', 'AUSGELOST', 'LAUFEND', 'BEENDET', 'ABGESAGT')`
 
-### Besonderheiten
+### DEFAULT
 
-- Nicht jede Kategorie verwendet alle Kriterien.
-- Bei `EINZEL` sollte `SpielerProTeam = NULL` sein.
-- Bei `MANNSCHAFT` muss `SpielerProTeam` gesetzt sein.
-- Alters-, Elo- und Klassierungsregeln werden über Stored Procedures geprüft.
+- `BevorzugePassendeKategorie = 1`
+- `AlleSpielerMuessenKlassierungErfuellen = 1`
+- `AlleSpielerMuessenEloErfuellen = 1`
 
-## 33. Einzelanmeldung
+Hinweis: Nicht alle fachlichen Kombinationen der Kategorieparameter werden durch CHECK-Constraints erzwungen. Beispielsweise wird nicht allein durch die Tabelle verlangt, dass bei einer Mannschaftskategorie `SpielerProTeam` gesetzt ist.
+
+---
+
+## 34. Einzelanmeldung
 
 ### PRIMARY KEY
 
@@ -806,12 +841,16 @@ Sinnvoll:
 
 - `Status IN ('ANGEMELDET', 'BESTAETIGT', 'ABGELEHNT', 'ZURUECKGEZOGEN')`
 
-### Besonderheit
+### DEFAULT
 
-- Die zugehörige Turnierkategorie muss `Wettkampfform = 'EINZEL'` besitzen.
-- Die fachliche Zulassung wird über `SpielerBewertung` geprüft.
+- `Anmeldedatum = SYSDATETIME()`
+- `Status = 'ANGEMELDET'`
 
-## 34. Doppelanmeldung
+Die Tabellen-Constraints prüfen nicht, ob die referenzierte Kategorie tatsächlich `Wettkampfform = 'EINZEL'` besitzt. Diese Fachlogik wird zusätzlich über die Anwendungs- beziehungsweise Stored-Procedure-Logik abgesichert.
+
+---
+
+## 35. Doppelanmeldung
 
 ### PRIMARY KEY
 
@@ -820,22 +859,39 @@ Sinnvoll:
 ### FOREIGN KEY
 
 - `TurnierKategorieID` → `TurnierKategorie.TurnierKategorieID`
-- `Spieler1Lizenz` → `Spieler.LizenzNr`
-- `Spieler2Lizenz` → `Spieler.LizenzNr`
+- `Spieler1LizenzNr` → `Spieler.LizenzNr`
+- `Spieler2LizenzNr` → `Spieler.LizenzNr`
+
+### Berechnete persistierte Spalten
+
+- `SpielerMinLizenz`
+- `SpielerMaxLizenz`
+
+Die beiden Spalten normalisieren die Reihenfolge der Lizenznummern.
 
 ### CHECK
 
-- `Spieler1Lizenz <> Spieler2Lizenz`
+- `Spieler1LizenzNr <> Spieler2LizenzNr`
 - `Status IN ('ANGEMELDET', 'BESTAETIGT', 'ABGELEHNT', 'ZURUECKGEZOGEN')`
 
-### Besonderheiten
+### DEFAULT
 
-- Die Kategorie muss `Wettkampfform = 'DOPPEL'` besitzen.
-- Eine Paarung darf innerhalb derselben Kategorie nicht doppelt vorkommen.
-- Die Reihenfolge der beiden Spieler darf dabei keine Rolle spielen.
-- Diese Dublettenprüfung wird später über eine Stored Procedure oder einen normierten Pair-Key umgesetzt.
+- `Anmeldedatum = SYSDATETIME()`
+- `Status = 'ANGEMELDET'`
 
-## 35. Turniermannschaft
+### UNIQUE-Index
+
+- `UX_Doppelanmeldung_Paar`
+- Schlüssel:
+  - `TurnierKategorieID`
+  - `SpielerMinLizenz`
+  - `SpielerMaxLizenz`
+
+Damit werden auch vertauschte Doppelpaare als identisch behandelt. Beispielsweise gelten `(512038, 512039)` und `(512039, 512038)` als dieselbe Paarung.
+
+---
+
+## 36. Turniermannschaft
 
 ### PRIMARY KEY
 
@@ -847,23 +903,24 @@ Sinnvoll:
 
 ### UNIQUE
 
-Sinnvoll:
-
 - Kombination aus `TurnierKategorieID` und `Name`
 
 ### CHECK
 
 - `Status IN ('ANGEMELDET', 'BESTAETIGT', 'ABGELEHNT', 'ZURUECKGEZOGEN')`
 
-### Besonderheit
+### DEFAULT
 
-- Die Kategorie muss `Wettkampfform = 'MANNSCHAFT'` besitzen.
+- `Anmeldedatum = SYSDATETIME()`
+- `Status = 'ANGEMELDET'`
 
-## 36. TurniermannschaftSpieler
+---
+
+## 37. TurniermannschaftSpieler
 
 ### PRIMARY KEY
 
-Zusammengesetzter Primärschlüssel:
+Zusammengesetzt aus:
 
 - `TurniermannschaftID`
 - `LizenzNr`
@@ -876,15 +933,32 @@ Zusammengesetzter Primärschlüssel:
 ### CHECK
 
 - `Position IS NULL OR Position > 0`
-- `IstCaptain IN (0,1)`
 
-### Besonderheiten
+### DEFAULT
 
-- Ein Spieler darf innerhalb derselben Turniermannschaft nur einmal vorkommen.
-- Pro Turniermannschaft sollte höchstens ein Captain existieren.
-- Die maximale Spieleranzahl richtet sich nach `TurnierKategorie.SpielerProTeam`.
+- `IstCaptain = 0`
 
-## 37. Einzelspiel
+### Gefilterter UNIQUE-Index für Positionen
+
+- `UX_TurniermannschaftSpieler_Position`
+- Schlüssel:
+  - `TurniermannschaftID`
+  - `Position`
+- Filter: `Position IS NOT NULL`
+
+Eine vergebene Position kann innerhalb einer Turniermannschaft nur einmal vorkommen.
+
+### Gefilterter UNIQUE-Index für Captain
+
+- `UX_TurniermannschaftSpieler_Captain`
+- Schlüssel: `TurniermannschaftID`
+- Filter: `IstCaptain = 1`
+
+Dadurch kann pro Turniermannschaft höchstens ein Captain existieren.
+
+---
+
+## 38. Einzelspiel
 
 ### PRIMARY KEY
 
@@ -900,26 +974,52 @@ Zusammengesetzter Primärschlüssel:
 
 ### CHECK
 
-- Genau eine Herkunft muss gesetzt sein:
-  - `BegegnungID IS NOT NULL AND TurnierKategorieID IS NULL`
-  - oder `BegegnungID IS NULL AND TurnierKategorieID IS NOT NULL`
-- `Spieler1Lizenz IS NULL OR Spieler2Lizenz IS NULL OR Spieler1Lizenz <> Spieler2Lizenz`
-- `SaetzeSpieler1 >= 0`
-- `SaetzeSpieler2 >= 0`
+#### Herkunft
+
+Genau eine der beiden Herkünfte muss gesetzt sein:
+
+- `BegegnungID IS NOT NULL AND TurnierKategorieID IS NULL`
+- oder `BegegnungID IS NULL AND TurnierKategorieID IS NOT NULL`
+
+#### Spieler
+
+- Spieler 1 und Spieler 2 dürfen nicht identisch sein, sofern beide gesetzt sind.
+- Bei `Spielgrund = 'REGULAER'` müssen beide Spieler gesetzt sein.
+- `GewinnerLizenz` muss NULL sein oder Spieler 1 beziehungsweise Spieler 2 entsprechen.
+
+#### Resultat
+
+- `SaetzeSpieler1 BETWEEN 0 AND 4`
+- `SaetzeSpieler2 BETWEEN 0 AND 4`
 - `PunkteSpieler1 IN (0,1)`
 - `PunkteSpieler2 IN (0,1)`
-- `Spielgrund IN ('REGULAER', 'AUFGABE', 'FORFAIT', 'NICHTANGETRETEN', 'ANNULLIERT')`
-- `Status IN ('GEPLANT', 'LAUFEND', 'ABGESCHLOSSEN', 'ANNULLIERT')`
 
-### Besonderheiten
+#### Spielgrund
 
-- Bei `REGULAER` müssen beide Spieler gesetzt sein.
-- Bei `FORFAIT` darf eine Spieler-Lizenz NULL sein.
-- Bei `AUFGABE` bleiben beide Spieler gesetzt.
-- `GewinnerLizenz` muss einem der beteiligten Spieler entsprechen.
-- Nur `REGULAER` und `AUFGABE` sind Elo-relevant.
+- `REGULAER`
+- `AUFGABE`
+- `FORFAIT`
+- `NICHTANGETRETEN`
+- `ANNULLIERT`
 
-## 38. Doppelspiel
+#### Status
+
+- `GEPLANT`
+- `LAUFEND`
+- `ABGESCHLOSSEN`
+- `ANNULLIERT`
+
+### DEFAULT
+
+- `Spieldatum = SYSDATETIME()`
+- `SaetzeSpieler1 = 0`
+- `SaetzeSpieler2 = 0`
+- `PunkteSpieler1 = 0`
+- `PunkteSpieler2 = 0`
+
+---
+
+## 39. Doppelspiel
 
 ### PRIMARY KEY
 
@@ -936,23 +1036,57 @@ Zusammengesetzter Primärschlüssel:
 
 ### CHECK
 
-- Genau eine Herkunft muss gesetzt sein.
+#### Herkunft
+
+Genau eine der beiden Herkünfte muss gesetzt sein:
+
+- Ligabegegnung
+- oder Turnierkategorie
+
+#### Gewinner
+
 - `Gewinnerseite IS NULL OR Gewinnerseite IN (1,2)`
-- `SaetzeSeite1 >= 0`
-- `SaetzeSeite2 >= 0`
+
+#### Resultat
+
+- `SaetzeSeite1 BETWEEN 0 AND 4`
+- `SaetzeSeite2 BETWEEN 0 AND 4`
 - `PunkteSeite1 IN (0,1)`
 - `PunkteSeite2 IN (0,1)`
-- `Spielgrund IN ('REGULAER', 'AUFGABE', 'FORFAIT', 'NICHTANGETRETEN', 'ANNULLIERT')`
-- `Status IN ('GEPLANT', 'LAUFEND', 'ABGESCHLOSSEN', 'ANNULLIERT')`
 
-### Besonderheiten
+#### Spielgrund
 
-- Bei `REGULAER` müssen alle vier Spieler gesetzt sein.
-- Bei `REGULAER` müssen alle vier Spieler verschieden sein.
-- Bei `FORFAIT` dürfen Spieler-Lizenzen NULL sein.
-- Doppelspiele sind nie Elo-relevant.
+- `REGULAER`
+- `AUFGABE`
+- `FORFAIT`
+- `NICHTANGETRETEN`
+- `ANNULLIERT`
 
-## 39. Satz
+#### Status
+
+- `GEPLANT`
+- `LAUFEND`
+- `ABGESCHLOSSEN`
+- `ANNULLIERT`
+
+#### Reguläre Doppel
+
+Bei `Spielgrund = 'REGULAER'`:
+
+- müssen alle vier Spieler gesetzt sein;
+- müssen alle vier Spieler voneinander verschieden sein.
+
+### DEFAULT
+
+- `Spieldatum = SYSDATETIME()`
+- `SaetzeSeite1 = 0`
+- `SaetzeSeite2 = 0`
+- `PunkteSeite1 = 0`
+- `PunkteSeite2 = 0`
+
+---
+
+## 40. Satz
 
 ### PRIMARY KEY
 
@@ -965,23 +1099,62 @@ Zusammengesetzter Primärschlüssel:
 
 ### CHECK
 
-- Genau eine Herkunft muss gesetzt sein:
-  - Einzelspiel
-  - oder Doppelspiel
+#### Herkunft
+
+Genau eine Herkunft muss gesetzt sein:
+
+- `EinzelspielID IS NOT NULL AND DoppelspielID IS NULL`
+- oder `EinzelspielID IS NULL AND DoppelspielID IS NOT NULL`
+
+#### Satznummer
+
 - `SatzNummer BETWEEN 1 AND 7`
+
+#### Punkte
+
 - `PunkteSeite1 >= 0`
 - `PunkteSeite2 >= 0`
 - `PunkteSeite1 <> PunkteSeite2`
 
-### UNIQUE
+### Gefilterter UNIQUE-Index für Einzelspiele
 
-Da SQL Server mit zwei nullable Fremdschlüsseln arbeitet, brauchen wir später zwei gefilterte UNIQUE-Indizes:
+- `UX_Satz_Einzelspiel_SatzNummer`
+- Schlüssel:
+  - `EinzelspielID`
+  - `SatzNummer`
+- Filter: `EinzelspielID IS NOT NULL`
 
-- `(EinzelspielID, SatzNummer)` für Einzelspiele
-- `(DoppelspielID, SatzNummer)` für Doppelspiele
+### Gefilterter UNIQUE-Index für Doppelspiele
 
-### Besonderheiten
+- `UX_Satz_Doppelspiel_SatzNummer`
+- Schlüssel:
+  - `DoppelspielID`
+  - `SatzNummer`
+- Filter: `DoppelspielID IS NOT NULL`
 
-- Bei Ligaspielen gibt es maximal fünf Sätze.
-- Bei Turnieren mit vier Gewinnsätzen sind maximal sieben Sätze erlaubt.
-- Bei Forfait werden keine künstlichen Satzdatensätze angelegt.
+Damit kann eine Satznummer innerhalb eines einzelnen Spiels nur einmal gespeichert werden.
+
+---
+
+## 41. Zusammenfassung
+
+Die Datenintegrität wird auf mehreren Ebenen abgesichert:
+
+- Primärschlüssel identifizieren Datensätze eindeutig.
+- Fremdschlüssel verhindern ungültige Referenzen.
+- UNIQUE-Regeln verhindern fachliche Dubletten.
+- CHECK-Constraints begrenzen Wertebereiche und erlaubte Zustände.
+- Gefilterte UNIQUE-Indizes sichern Regeln ab, die mit normalen UNIQUE-Constraints nicht ausreichend abbildbar sind.
+- DEFAULT-Constraints liefern definierte Ausgangswerte.
+- Zusätzliche Geschäftsregeln werden über Stored Procedures und kontrollierte Abläufe umgesetzt.
+
+Besonders hervorzuheben sind:
+
+- maximal eine aktuelle Saison;
+- maximal ein aktiver Hauptspielort pro Club;
+- maximal ein Hauptverein pro Spieler und Saison;
+- normalisierte Eindeutigkeit von Doppelpaarungen;
+- maximal ein Captain pro Turniermannschaft;
+- eindeutige Satznummern je Einzel- oder Doppelspiel;
+- konsistente Genehmigungsdaten bei Begegnungen;
+- exklusive Herkunft von Einzelspielen, Doppelspielen und Sätzen.
