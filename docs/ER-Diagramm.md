@@ -2,63 +2,52 @@
 
 ## 1. Zweck
 
-Dieses Dokument visualisiert das relationale Datenmodell der
-STT-Datenbank.
+Dieses Dokument visualisiert das relationale Datenmodell der STT-Datenbank.
 
-Da das finale Schema 39 Tabellen umfasst, werden zwei Darstellungen
-verwendet:
+Da das finale Schema 39 Tabellen umfasst, werden mehrere fachlich gegliederte Mermaid-Diagramme verwendet. Die Diagramme orientieren sich am tatsächlich implementierten SQL-Schema.
 
-1.  **Fachübersicht** -- zeigt die wichtigsten Bereiche und
-    Zusammenhänge in kompakter Form.
-2.  **Gesamtmodell** -- zeigt alle 39 Tabellen mit ihren Primär- und
-    Fremdschlüsselbeziehungen.
+Die vollständigen Detailbeschreibungen befinden sich zusätzlich in:
 
-Die vollständigen Attribute, Constraints und Geschäftsregeln sind
-separat in `Datenmodell.md`, `Constraints.md` und `Geschaeftsregeln.md`
-dokumentiert. Das ER-Diagramm konzentriert sich deshalb bewusst auf
-Struktur und Beziehungen.
+- `Datenmodell.md`
+- `Constraints.md`
+- `Geschaeftsregeln.md`
 
-------------------------------------------------------------------------
+---
 
 ## 2. Fachübersicht
 
-``` mermaid
+```mermaid
 flowchart LR
-    Stammdaten["Stammdaten<br/>Saison · Verband · Club<br/>Spielort · Alterskategorie<br/>Klassierungsstufe"]
+    A["Stammdaten<br/>Saison · Verband · Alterskategorie · Klassierungsstufe · Club · Spielort"]
+    B["Spieler / Elo<br/>Spieler · SpielerSaison · SpielerVerein · Bewertungsperiode · SpielerBewertung · SpielerElo · EloProtokoll"]
+    C["Benutzer / Funktionen<br/>Funktion · Vereinsfunktionaer · FunktionaerFunktion · Benutzer"]
+    D["Ligabetrieb<br/>Ball · Spielsystem · Ligawettbewerb · Ligaphase · Mannschaft · MannschaftSpieler · BenutzerMannschaft"]
+    E["Begegnungen<br/>Begegnung · Begegnungsaufstellung · Begegnungsbemerkung · BegegnungAenderung"]
+    F["Turniere<br/>Turnier · TurnierKategorie · Einzelanmeldung · Doppelanmeldung · Turniermannschaft · TurniermannschaftSpieler"]
+    G["Spiele / Resultate<br/>Einzelspiel · Doppelspiel · Satz"]
 
-    Spieler["Spieler / Elo<br/>Spieler · SpielerSaison<br/>SpielerVerein · SpielerBewertung<br/>SpielerElo · EloProtokoll"]
-
-    Liga["Ligabetrieb<br/>Ligawettbewerb · Ligaphase<br/>Mannschaft · MannschaftSpieler<br/>Spielsystem · Ball"]
-
-    Begegnung["Begegnungen<br/>Begegnung · Aufstellung<br/>Bemerkung · Änderung"]
-
-    Spiele["Spiele / Resultate<br/>Einzelspiel · Doppelspiel<br/>Satz"]
-
-    Turnier["Turniere<br/>Turnier · TurnierKategorie<br/>Einzel-/Doppelanmeldung<br/>Turniermannschaft"]
-
-    Benutzer["Benutzer / Funktionen<br/>Benutzer · Funktion<br/>Vereinsfunktionaer"]
-
-    Stammdaten --> Spieler
-    Stammdaten --> Liga
-    Stammdaten --> Turnier
-    Spieler --> Liga
-    Liga --> Begegnung
-    Begegnung --> Spiele
-    Turnier --> Spiele
-    Spieler --> Turnier
-    Spieler --> Spiele
-    Benutzer --> Liga
-    Benutzer --> Begegnung
+    A --> B
+    A --> D
+    A --> F
+    B --> D
+    B --> F
+    B --> G
+    C --> D
+    C --> E
+    D --> E
+    E --> G
+    F --> G
 ```
 
-------------------------------------------------------------------------
+---
 
 ## 3. Gesamtmodell
 
 ### 3.1 Stammdaten, Spieler und Elo
 
-``` mermaid
+```mermaid
 erDiagram
+
     SAISON {
         int SaisonID PK
         nvarchar Bezeichnung
@@ -73,6 +62,9 @@ erDiagram
         nvarchar Name
         varchar Verbandstyp
         int UebergeordneterVerbandID FK
+        date Gruendungsdatum
+        nvarchar Webseite
+        bit Aktiv
     }
 
     ALTERSKATEGORIE {
@@ -89,15 +81,27 @@ erDiagram
     CLUB {
         int VereinsNr PK
         nvarchar Clubname
+        nvarchar Kurzname
         int RegionalverbandID FK
+        smallint Gruendungsjahr
+        nvarchar Webseite
+        nvarchar Ort
+        char Landcode
+        bit Aktiv
     }
 
     SPIELORT {
         int SpielortID PK
         int VereinsNr FK
         nvarchar Bezeichnung
+        nvarchar Gebaeude
+        nvarchar Strasse
+        nvarchar Hausnummer
+        char PLZ
         nvarchar Ort
+        char Landcode
         bit IstHauptspielort
+        bit Aktiv
     }
 
     SPIELER {
@@ -138,7 +142,7 @@ erDiagram
         int KlassierungsgrenzeID PK
         int BewertungsperiodeID FK
         tinyint Stufenwert FK
-        varchar Klassierungstyp
+        varchar Klassierungsart
         decimal MinElo
         decimal MittelElo
         decimal MaxElo
@@ -152,6 +156,7 @@ erDiagram
         tinyint HerrenStufenwert FK
         tinyint DamenStufenwert FK
         varchar Alterskategorie FK
+        datetime ErstelltAm
     }
 
     ELOMONATSLAUF {
@@ -160,6 +165,9 @@ erDiagram
         date PeriodeVon
         date PeriodeBis
         varchar Status
+        datetime GestartetAm
+        datetime AbgeschlossenAm
+        nvarchar Bemerkung
     }
 
     SPIELERELO {
@@ -167,9 +175,26 @@ erDiagram
         int LizenzNr FK
         bigint EloMonatslaufID FK
         decimal Elo
-        decimal EloDelta
+        decimal EloDeltaZumVormonat
         tinyint HerrenStufenwert FK
         tinyint DamenStufenwert FK
+        int HerrenRang
+        int Gesamtrang
+        date GueltigAb
+        date GueltigBis
+    }
+
+    ELOPROTOKOLL {
+        bigint EloProtokollID PK
+        bigint EinzelspielID FK
+        int LizenzNr FK
+        int GegnerLizenzNr FK
+        bigint EloMonatslaufID FK
+        decimal StichtagsElo
+        decimal GegnerStichtagsElo
+        decimal Gewinnwahrscheinlichkeit
+        decimal VorschauElo
+        datetime ErstelltAm
     }
 
     VERBAND ||--o{ VERBAND : "übergeordnet"
@@ -180,7 +205,7 @@ erDiagram
     SAISON ||--o{ SPIELERSAISON : umfasst
     ALTERSKATEGORIE ||--o{ SPIELERSAISON : klassifiziert
 
-    SPIELER ||--o{ SPIELERVEREIN : gehört_zu
+    SPIELER ||--o{ SPIELERVEREIN : hat
     SAISON ||--o{ SPIELERVEREIN : gilt_in
     CLUB ||--o{ SPIELERVEREIN : Verein
 
@@ -189,7 +214,7 @@ erDiagram
     KLASSIERUNGSSTUFE ||--o{ KLASSIERUNGSGRENZE : Stufe
 
     SPIELER ||--o{ SPIELERBEWERTUNG : erhält
-    BEWERTUNGSPERIODE ||--o{ SPIELERBEWERTUNG : bewertet_in
+    BEWERTUNGSPERIODE ||--o{ SPIELERBEWERTUNG : bewertet
     KLASSIERUNGSSTUFE ||--o{ SPIELERBEWERTUNG : Herrenstufe
     KLASSIERUNGSSTUFE ||--o{ SPIELERBEWERTUNG : Damenstufe
     ALTERSKATEGORIE ||--o{ SPIELERBEWERTUNG : Altersklasse
@@ -198,14 +223,19 @@ erDiagram
     ELOMONATSLAUF ||--o{ SPIELERELO : erzeugt
     KLASSIERUNGSSTUFE ||--o{ SPIELERELO : Herrenstufe
     KLASSIERUNGSSTUFE ||--o{ SPIELERELO : Damenstufe
+
+    SPIELER ||--o{ ELOPROTOKOLL : Spieler
+    SPIELER ||--o{ ELOPROTOKOLL : Gegner
+    ELOMONATSLAUF ||--o{ ELOPROTOKOLL : gehört_zu
 ```
 
-------------------------------------------------------------------------
+---
 
 ### 3.2 Benutzer und Vereinsfunktionen
 
-``` mermaid
+```mermaid
 erDiagram
+
     CLUB {
         int VereinsNr PK
     }
@@ -225,15 +255,22 @@ erDiagram
     }
 
     VEREINSFUNKTIONAER {
-        int VereinsfunktionaerID PK
+        int FunktionaerID PK
         int VereinsNr FK
         nvarchar Vorname
         nvarchar Nachname
+        nvarchar Email
+        nvarchar TelefonPrivat
+        nvarchar TelefonMobil
+        nvarchar Strasse
+        nvarchar Hausnummer
+        char PLZ
+        nvarchar Ort
         bit Aktiv
     }
 
     FUNKTIONAERFUNKTION {
-        int VereinsfunktionaerID PK,FK
+        int FunktionaerID PK,FK
         int FunktionID PK,FK
         date GueltigAb PK
         date GueltigBis
@@ -242,28 +279,30 @@ erDiagram
     BENUTZER {
         int BenutzerID PK
         nvarchar Benutzername
+        nvarchar Anzeigename
         int LizenzNr FK
+        varchar Rolle
         int VereinsNr FK
         int VerbandID FK
-        varchar Rolle
         bit Aktiv
     }
 
-    CLUB ||--o{ VEREINSFUNKTIONAER : beschäftigt
-    VEREINSFUNKTIONAER ||--o{ FUNKTIONAERFUNKTION : besitzt
-    FUNKTION ||--o{ FUNKTIONAERFUNKTION : wird_zugeordnet
+    CLUB ||--o{ VEREINSFUNKTIONAER : besitzt
+    VEREINSFUNKTIONAER ||--o{ FUNKTIONAERFUNKTION : hat
+    FUNKTION ||--o{ FUNKTIONAERFUNKTION : zugeordnet
 
-    SPIELER ||--o{ BENUTZER : kann_besitzen
-    CLUB ||--o{ BENUTZER : kann_besitzen
-    VERBAND ||--o{ BENUTZER : kann_besitzen
+    SPIELER ||--o{ BENUTZER : optional
+    CLUB ||--o{ BENUTZER : optional
+    VERBAND ||--o{ BENUTZER : optional
 ```
 
-------------------------------------------------------------------------
+---
 
 ### 3.3 Ligabetrieb und Mannschaften
 
-``` mermaid
+```mermaid
 erDiagram
+
     SAISON {
         int SaisonID PK
     }
@@ -292,7 +331,8 @@ erDiagram
         int BallID PK
         nvarchar Marke
         nvarchar Modell
-        nvarchar Farbe
+        varchar Farbe
+        bit Aktiv
     }
 
     SPIELSYSTEM {
@@ -302,32 +342,37 @@ erDiagram
         tinyint AnzahlEinzel
         tinyint AnzahlDoppel
         tinyint MaxAnzahlSpiele
+        bit Aktiv
     }
 
     LIGAWETTBEWERB {
         int LigawettbewerbID PK
         int SaisonID FK
         int VerbandID FK
+        nvarchar Bezeichnung
+        varchar Geschlechtskategorie
         varchar Alterskategorie FK
         int SpielsystemID FK
-        varchar Geschlecht
+        bit Aktiv
     }
 
     LIGAPHASE {
         int LigaphaseID PK
         int LigawettbewerbID FK
-        int KlassenleiterBenutzerID FK
+        nvarchar Bezeichnung
         varchar Phasentyp
         nvarchar Gruppenbezeichnung
+        int KlassenleiterBenutzerID FK
+        bit Aktiv
     }
 
     MANNSCHAFT {
         int MannschaftID PK
         int VereinsNr FK
         int LigaphaseID FK
+        tinyint MannschaftNummer
         int KapitaenLizenz FK
         int BallID FK
-        int MannschaftsNr
         bit Aktiv
     }
 
@@ -338,6 +383,7 @@ erDiagram
         varchar Meldungsart
         tinyint StammPosition
         bit Spielberechtigt
+        nvarchar Bemerkung
     }
 
     BENUTZERMANNSCHAFT {
@@ -347,7 +393,7 @@ erDiagram
 
     SAISON ||--o{ LIGAWETTBEWERB : enthält
     VERBAND ||--o{ LIGAWETTBEWERB : organisiert
-    ALTERSKATEGORIE ||--o{ LIGAWETTBEWERB : begrenzt
+    ALTERSKATEGORIE ||--o{ LIGAWETTBEWERB : optional
     SPIELSYSTEM ||--o{ LIGAWETTBEWERB : verwendet
 
     LIGAWETTBEWERB ||--o{ LIGAPHASE : besitzt
@@ -365,12 +411,13 @@ erDiagram
     MANNSCHAFT ||--o{ BENUTZERMANNSCHAFT : wird_verwaltet
 ```
 
-------------------------------------------------------------------------
+---
 
 ### 3.4 Begegnungen
 
-``` mermaid
+```mermaid
 erDiagram
+
     LIGAPHASE {
         int LigaphaseID PK
     }
@@ -397,11 +444,24 @@ erDiagram
         int HeimMannschaftID FK
         int GastMannschaftID FK
         int SpielortID FK
-        int GenehmigtVonBenutzerID FK
-        int Runde
-        date Spieldatum
-        varchar Status
+        tinyint Runde
+        date Datum
+        time Startzeit
+        time Endzeit
+        tinyint SiegeHeim
+        tinyint SiegeGast
+        tinyint MannschaftspunkteHeim
+        tinyint MannschaftspunkteGast
+        smallint SaetzeHeim
+        smallint SaetzeGast
+        smallint BaelleHeim
+        smallint BaelleGast
+        smallint ZuschauerAnzahl
+        nvarchar SchiedsrichterName
         bit MatchblattGenehmigt
+        datetime GenehmigtAm
+        int GenehmigtVon FK
+        varchar Status
     }
 
     BEGEGNUNGSAUFSTELLUNG {
@@ -418,12 +478,15 @@ erDiagram
         bigint BegegnungID FK
         int BenutzerID FK
         varchar Bemerkungsart
+        nvarchar Text
+        datetime ErstelltAm
     }
 
     BEGEGNUNGAENDERUNG {
         bigint BegegnungAenderungID PK
         bigint BegegnungID FK
         int BenutzerID FK
+        datetime Aenderungsdatum
         nvarchar Grund
     }
 
@@ -444,12 +507,13 @@ erDiagram
     BENUTZER ||--o{ BEGEGNUNGAENDERUNG : ändert
 ```
 
-------------------------------------------------------------------------
+---
 
 ### 3.5 Turniere und Anmeldungen
 
-``` mermaid
+```mermaid
 erDiagram
+
     SAISON {
         int SaisonID PK
     }
@@ -482,31 +546,49 @@ erDiagram
         int TurnierID PK
         int SaisonID FK
         int BewertungsperiodeID FK
-        int VeranstalterVereinsNr FK
+        nvarchar Turniername
+        int VeranstalterNr FK
         int SpielortID FK
-        nvarchar Name
         date Startdatum
-        date Meldeschluss
+        date Enddatum
+        datetime Meldeschluss
+        nvarchar HallenSchiedsrichterName
         varchar Status
     }
 
     TURNIERKATEGORIE {
         int TurnierKategorieID PK
         int TurnierID FK
-        varchar Alterskategorie FK
-        tinyint MinStufenwert FK
-        tinyint MaxStufenwert FK
+        nvarchar Bezeichnung
         varchar Kategorieart
         varchar Wettkampfform
-        varchar Geschlecht
+        varchar Geschlechtskategorie
+        varchar VerwendeteKlassierungsart
+        varchar Alterskategorie FK
         varchar Altersregel
+        bit BevorzugePassendeKategorie
+        tinyint MinStufenwert FK
+        tinyint MaxStufenwert FK
+        bit AlleSpielerMuessenKlassierungErfuellen
+        decimal MinEloWert
+        decimal TopEloWert
+        bit AlleSpielerMuessenEloErfuellen
+        tinyint SpielerProTeam
+        smallint MinKlassierungSumme
+        smallint MaxKlassierungSumme
+        decimal MinEloSumme
+        decimal MaxEloSumme
+        tinyint Gewinnsaetze
+        varchar Status
     }
 
     EINZELANMELDUNG {
         bigint EinzelanmeldungID PK
         int TurnierKategorieID FK
         int LizenzNr FK
+        datetime Anmeldedatum
         varchar Status
+        nvarchar Ablehnungsgrund
     }
 
     DOPPELANMELDUNG {
@@ -514,20 +596,24 @@ erDiagram
         int TurnierKategorieID FK
         int Spieler1LizenzNr FK
         int Spieler2LizenzNr FK
+        datetime Anmeldedatum
+        varchar Status
+        nvarchar Ablehnungsgrund
         int SpielerMinLizenz
         int SpielerMaxLizenz
-        varchar Status
     }
 
     TURNIERMANNSCHAFT {
-        int TurniermannschaftID PK
+        bigint TurniermannschaftID PK
         int TurnierKategorieID FK
-        nvarchar Mannschaftsname
+        nvarchar Name
+        datetime Anmeldedatum
         varchar Status
+        nvarchar Ablehnungsgrund
     }
 
     TURNIERMANNSCHAFTSPIELER {
-        int TurniermannschaftID PK,FK
+        bigint TurniermannschaftID PK,FK
         int LizenzNr PK,FK
         tinyint Position
         bit IstCaptain
@@ -539,7 +625,7 @@ erDiagram
     SPIELORT ||--o{ TURNIER : findet_statt_in
 
     TURNIER ||--o{ TURNIERKATEGORIE : besitzt
-    ALTERSKATEGORIE ||--o{ TURNIERKATEGORIE : Altersgrenze
+    ALTERSKATEGORIE ||--o{ TURNIERKATEGORIE : optional
     KLASSIERUNGSSTUFE ||--o{ TURNIERKATEGORIE : Mindeststufe
     KLASSIERUNGSSTUFE ||--o{ TURNIERKATEGORIE : Höchststufe
 
@@ -555,12 +641,13 @@ erDiagram
     SPIELER ||--o{ TURNIERMANNSCHAFTSPIELER : spielt
 ```
 
-------------------------------------------------------------------------
+---
 
 ### 3.6 Einzelspiele, Doppelspiele, Sätze und Elo-Protokoll
 
-``` mermaid
+```mermaid
 erDiagram
+
     BEGEGNUNG {
         bigint BegegnungID PK
     }
@@ -581,9 +668,16 @@ erDiagram
         bigint EinzelspielID PK
         bigint BegegnungID FK
         int TurnierKategorieID FK
-        int Spieler1LizenzNr FK
-        int Spieler2LizenzNr FK
-        int GewinnerLizenzNr FK
+        tinyint Spielnummer
+        varchar Spielcode
+        int Spieler1Lizenz FK
+        int Spieler2Lizenz FK
+        int GewinnerLizenz FK
+        datetime Spieldatum
+        tinyint SaetzeSpieler1
+        tinyint SaetzeSpieler2
+        tinyint PunkteSpieler1
+        tinyint PunkteSpieler2
         varchar Spielgrund
         varchar Status
     }
@@ -592,11 +686,18 @@ erDiagram
         bigint DoppelspielID PK
         bigint BegegnungID FK
         int TurnierKategorieID FK
-        int Spieler1LizenzNr FK
-        int Spieler2LizenzNr FK
-        int Spieler3LizenzNr FK
-        int Spieler4LizenzNr FK
-        tinyint GewinnerSeite
+        tinyint Spielnummer
+        varchar Spielcode
+        int Seite1Spieler1Lizenz FK
+        int Seite1Spieler2Lizenz FK
+        int Seite2Spieler1Lizenz FK
+        int Seite2Spieler2Lizenz FK
+        tinyint Gewinnerseite
+        datetime Spieldatum
+        tinyint SaetzeSeite1
+        tinyint SaetzeSeite2
+        tinyint PunkteSeite1
+        tinyint PunkteSeite2
         varchar Spielgrund
         varchar Status
     }
@@ -606,8 +707,8 @@ erDiagram
         bigint EinzelspielID FK
         bigint DoppelspielID FK
         tinyint SatzNummer
-        smallint Punkte1
-        smallint Punkte2
+        tinyint PunkteSeite1
+        tinyint PunkteSeite2
     }
 
     ELOPROTOKOLL {
@@ -620,6 +721,7 @@ erDiagram
         decimal GegnerStichtagsElo
         decimal Gewinnwahrscheinlichkeit
         decimal VorschauElo
+        datetime ErstelltAm
     }
 
     BEGEGNUNG ||--o{ EINZELSPIEL : enthält
@@ -630,10 +732,10 @@ erDiagram
 
     BEGEGNUNG ||--o{ DOPPELSPIEL : enthält
     TURNIERKATEGORIE ||--o{ DOPPELSPIEL : enthält
-    SPIELER ||--o{ DOPPELSPIEL : Spieler1
-    SPIELER ||--o{ DOPPELSPIEL : Spieler2
-    SPIELER ||--o{ DOPPELSPIEL : Spieler3
-    SPIELER ||--o{ DOPPELSPIEL : Spieler4
+    SPIELER ||--o{ DOPPELSPIEL : Seite1Spieler1
+    SPIELER ||--o{ DOPPELSPIEL : Seite1Spieler2
+    SPIELER ||--o{ DOPPELSPIEL : Seite2Spieler1
+    SPIELER ||--o{ DOPPELSPIEL : Seite2Spieler2
 
     EINZELSPIEL ||--o{ SATZ : besitzt
     DOPPELSPIEL ||--o{ SATZ : besitzt
@@ -644,15 +746,13 @@ erDiagram
     ELOMONATSLAUF ||--o{ ELOPROTOKOLL : gehört_zu
 ```
 
-------------------------------------------------------------------------
+---
 
 ## 4. Zentrale Beziehungen
 
-Die wichtigsten fachlichen Beziehungsketten des Modells sind:
-
 ### Spieler und Saison
 
-``` text
+```text
 Saison
   |
   +-- SpielerSaison -- Spieler
@@ -660,12 +760,9 @@ Saison
   +-- SpielerVerein -- Club
 ```
 
-Dadurch bleiben dauerhafte Spieler-Stammdaten von saisonabhängigen
-Informationen getrennt.
-
 ### Klassierung und Elo
 
-``` text
+```text
 Saison
   |
   +-- Bewertungsperiode
@@ -681,12 +778,9 @@ EloMonatslauf
   +-- EloProtokoll -- Einzelspiel
 ```
 
-Offizielle Bewertungen und laufende monatliche Elo-Entwicklung werden
-damit getrennt historisiert.
-
 ### Liga
 
-``` text
+```text
 Saison
   |
   +-- Ligawettbewerb
@@ -706,7 +800,7 @@ Saison
 
 ### Turnier
 
-``` text
+```text
 Turnier
   |
   +-- TurnierKategorie
@@ -723,7 +817,7 @@ Turnier
 
 ### Resultate
 
-``` text
+```text
 Einzelspiel ----+
                 +---- Satz
 Doppelspiel ----+
@@ -731,68 +825,55 @@ Doppelspiel ----+
 Einzelspiel ---- EloProtokoll
 ```
 
-Nur Einzelspiele können eine Elo-Berechnung auslösen.
+Nur Einzelspiele können Elo-Protokolle erzeugen.
 
-------------------------------------------------------------------------
+---
 
 ## 5. Modellierungsentscheidungen
 
 ### Saisonabhängige Daten
 
-Spieler-Stammdaten werden nicht für jede Saison dupliziert.
-Saisonabhängige Informationen befinden sich in eigenen Tabellen wie
-`SpielerSaison` und `SpielerVerein`.
+Spieler-Stammdaten werden nicht pro Saison dupliziert. Saisonabhängige Informationen liegen in `SpielerSaison` und `SpielerVerein`.
 
 ### Historisierung
 
-Bewertungen und Elo-Werte werden nicht einfach überschrieben.
-Bewertungsperioden und Monatsläufe ermöglichen eine historische
-Nachvollziehbarkeit.
+Offizielle Bewertungen und monatliche Elo-Werte werden nicht überschrieben, sondern über Bewertungsperioden und Monatsläufe historisiert.
 
 ### Liga und Turnier teilen Resultattabellen
 
-`Einzelspiel` und `Doppelspiel` werden sowohl für Ligabegegnungen als
-auch für Turnierkategorien verwendet. Ein Spiel gehört dabei genau zu
-einer dieser beiden Quellen.
+`Einzelspiel` und `Doppelspiel` können entweder einer `Begegnung` oder einer `TurnierKategorie` zugeordnet sein.
 
 ### Gemeinsame Satztabelle
 
-Einzel- und Doppelspiele verwenden dieselbe Tabelle `Satz`. Ein Satz
-gehört genau zu einem Einzel- oder Doppelspiel.
+Die Tabelle `Satz` wird sowohl für Einzel- als auch Doppelspiele verwendet.
 
 ### Flexible Turnierstruktur
 
-Turnierkategorien bilden unterschiedliche Wettkampfformen und
-Einschränkungen ab. Dadurch werden Einzel-, Doppel- und
-Mannschaftswettbewerbe innerhalb desselben Modells unterstützt.
+`TurnierKategorie` unterstützt unterschiedliche Wettkampfformen und Einschränkungen über Alter, Klassierung, Elo und Geschlecht.
 
 ### Nachvollziehbare Elo-Berechnung
 
-Das `EloProtokoll` verbindet ein Elo-relevantes Einzelspiel mit Spieler,
-Gegner und Monatslauf. Dadurch kann die Berechnungsgrundlage später
-nachvollzogen werden.
+`EloProtokoll` verbindet ein Elo-relevantes Einzelspiel mit Spieler, Gegner und Monatslauf.
 
-------------------------------------------------------------------------
+---
 
 ## 6. Lesbarkeit des Gesamtmodells
 
-Eine einzige grafische Darstellung aller 39 Tabellen inklusive aller
-Attribute und Beziehungen wäre nur schwer lesbar.
+Eine einzige Darstellung aller 39 Tabellen mit sämtlichen Attributen wäre nur schwer lesbar.
 
-Deshalb ist das Modell in diesem Dokument fachlich aufgeteilt:
+Deshalb ist das Gesamtmodell in folgende Fachbereiche aufgeteilt:
 
-1.  Stammdaten, Spieler und Elo
-2.  Benutzer und Vereinsfunktionen
-3.  Ligabetrieb und Mannschaften
-4.  Begegnungen
-5.  Turniere und Anmeldungen
-6.  Spiele, Resultate und Elo-Protokoll
+1. Stammdaten, Spieler und Elo
+2. Benutzer und Vereinsfunktionen
+3. Ligabetrieb und Mannschaften
+4. Begegnungen
+5. Turniere und Anmeldungen
+6. Spiele, Resultate und Elo-Protokoll
 
-Zusammen bilden diese Teilmodelle das vollständige relationale Schema
-der Datenbank.
+Zusammen bilden diese Teilmodelle das vollständige relationale Schema.
 
-Für Detailinformationen zu einzelnen Tabellen siehe:
+Für Detailinformationen siehe:
 
--   `Datenmodell.md`
--   `Constraints.md`
--   `Geschaeftsregeln.md`
+- `Datenmodell.md`
+- `Constraints.md`
+- `Geschaeftsregeln.md`
