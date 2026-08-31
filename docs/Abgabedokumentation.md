@@ -1,20 +1,20 @@
-**STT-DB**
+# STT-DB
 
-**Abgabedokumentation zur Modulararbeit II**
+## Abgabedokumentation zur Modulararbeit II
 
 Relationale Datenbank für Swiss Table Tennis
 
-| **Autor/in**              | \[Name eintragen\]   |
-|---------------------------|----------------------|
-| **Klasse / Bildungsgang** | \[Klasse eintragen\] |
-| **Modul**                 | Modulararbeit II     |
-| **Abgabedatum**           | \[Datum eintragen\]  |
-| **Repository**            | STT-DB_Modularbeit2  |
+| | |
+|---|---|
+| **Autor** | Christian Abbühl |
+| **Klasse** | **B-TIP-24-T-a** |
+| **Modul** | **Datenbanken\_und\_Big\_Data** |
+| **Abgabedatum** | 21.09.2026 |
+| **Repository** | STT-DB_Modularbeit2 |
 
-**Technischer Endstand**
+### Technischer Endstand
 
-39 Tabellen \| 5 Views \| 6 Stored Procedures \| vollständiger
-Rebuild-Test
+39 Tabellen | 5 Views | 6 Stored Procedures | vollständiger Rebuild-Test
 
 # Inhaltsverzeichnis
 
