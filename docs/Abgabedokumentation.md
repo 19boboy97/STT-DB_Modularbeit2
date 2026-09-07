@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="../images/stt-logo-wide.png" alt="Swiss Table Tennis" width="600">
+</p>
+
 # STT-DB
 
 ## Abgabedokumentation zur Modulararbeit II
