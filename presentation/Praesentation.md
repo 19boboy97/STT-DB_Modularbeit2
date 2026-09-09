@@ -11,7 +11,7 @@
 **Modul:** Datenbanken_und_Big_Data  
 **Abgabe / Präsentation:** 21.09.2026
 
-**Technischer Endstand:** 39 Tabellen · 5 Views · 6 Stored Procedures · 5 Seed-Skripte · 2 Demo-Skripte
+**Technischer Endstand:** 39 Tabellen · 5 Views · 6 Stored Procedures · 5 Seed-Skripte · 3 Demo-Skripte
 
 ---
 
@@ -266,54 +266,143 @@ Der Rebuild-Test ist für mich der wichtigste technische Abschlussnachweis. Er z
 
 # 9. Live-Demo
 
-Für die Präsentation gibt es zwei reproduzierbare Demo-Skripte:
+Für die Demonstration gibt es drei aufeinander aufbauende SQL-Skripte:
 
 ```text
 sql/demo/
 ├── 01_DemoDaten.sql
-└── 02_DemoAblauf.sql
+├── 02_DemoAblauf.sql
+└── 03_PraesentationsDemo.sql
 ```
 
-## Ablauf
+## Zweck der Demo-Skripte
+
+### `01_DemoDaten.sql` – Ausgangslage
+
+Dieses Skript erstellt eine definierte und reproduzierbare Demo-Datenbasis.
+
+Dazu gehören unter anderem:
+
+- Demo-Saison
+- Clubs und Spielorte
+- Spieler
+- Mannschaften
+- Liga und Ligaphase
+- Turnier und Turnierkategorie
+- Ausgangswerte für die Elo-Verarbeitung
+
+Damit hängt die Demonstration nicht von zufällig bereits vorhandenen Daten ab.
+
+### `02_DemoAblauf.sql` – vollständiger Geschäftsablauf
+
+Dieses Skript führt den eigentlichen fachlichen Ablauf aus.
 
 ```text
-Demo-Daten erstellen
-      ↓
+Demo-Daten
+    ↓
 Spieler anmelden
-      ↓
-Spieler Mannschaft zuordnen
-      ↓
+    ↓
+Spieler einer Mannschaft zuordnen
+    ↓
 Begegnung erfassen
-      ↓
-Einzelspiel und Sätze
-      ↓
+    ↓
+Einzelspiel und Sätze speichern
+    ↓
 Begegnungsresultat abschliessen
-      ↓
+    ↓
 Elo aktualisieren
-      ↓
+    ↓
 Turnieranmeldung
-      ↓
-Views anzeigen
+    ↓
+Views prüfen
 ```
 
-Ein erfolgreicher Ablauf endet mit:
+Dabei werden die implementierten Stored Procedures in einem zusammenhängenden Ablauf verwendet.
+
+Unter anderem:
+
+- `sp_SpielerAnmelden`
+- `sp_MannschaftSpielerHinzufuegen`
+- `sp_BegegnungErfassen`
+- `sp_BegegnungResultatErfassen`
+- `sp_EloAktualisieren`
+- `sp_TurnierEinzelAnmelden`
+
+Ein erfolgreicher vollständiger Ablauf endet mit:
 
 ```text
 DEMO ERFOLGREICH ABGESCHLOSSEN
 ```
 
-### Was ich in der Live-Demo zeige
+### `03_PraesentationsDemo.sql` – kurze Live-Demo
 
-1. `01_DemoDaten.sql` ausführen
-2. `02_DemoAblauf.sql` ausführen
-3. Begegnung mit Resultat zeigen
-4. Elo-Veränderung zeigen
-5. Turnieranmeldung zeigen
-6. ausgewählte View-Ergebnisse zeigen
+Dieses Skript ist speziell für die zeitlich begrenzte Präsentation vorgesehen.
+
+Es zeigt kompakt:
+
+- technischen Umfang der Datenbank
+- alle 39 Tabellen
+- alle 5 Views
+- alle 6 Stored Procedures
+- eine abgeschlossene Begegnung
+- die historisierte Elo-Veränderung
+- eine erfolgreiche Turnieranmeldung
+
+## Ablauf während der Präsentation
+
+Die gesamte Präsentation inklusive Live-Demo darf maximal **10 Minuten** dauern.
+
+Deshalb werden `01_DemoDaten.sql` und `02_DemoAblauf.sql` nicht während der eigentlichen Präsentation vollständig ausgeführt.
+
+Die Demo-Daten und der vollständige Geschäftsablauf werden vorher vorbereitet und getestet.
+
+Live wird ausgeführt:
+
+```text
+03_PraesentationsDemo.sql
+```
+
+Dabei werden zunächst Umfang und Datenbankobjekte gezeigt:
+
+```text
+39 Tabellen
+5 Views
+6 Stored Procedures
+```
+
+Anschliessend werden die wichtigsten fachlichen Resultate gezeigt.
+
+### Begegnung
+
+```text
+Siege Heim: 6
+Siege Gast: 4
+Mannschaftspunkte: 3 : 1
+Status: ABGESCHLOSSEN
+```
+
+### Elo-Veränderung
+
+```text
+Leon Berger    +9.590
+Daniel Frei    -9.590
+```
+
+### Turnieranmeldung
+
+```text
+Leon Berger
+Open Einzel Demo
+Status: ANGEMELDET
+```
 
 ### Was ich dazu sage
 
-Die Demo ist bewusst reproduzierbar. Sie hängt nicht von zufällig vorhandenen Datensätzen ab, sondern verwendet eine definierte Demo-Datenbasis.
+Die Demo besteht aus drei Ebenen. `01_DemoDaten.sql` erzeugt zuerst eine reproduzierbare Ausgangslage. `02_DemoAblauf.sql` führt den vollständigen fachlichen Ablauf mit den Stored Procedures aus. Für die eigentliche Live-Präsentation verwende ich `03_PraesentationsDemo.sql`. Dieses Skript zeigt den technischen Umfang und die wichtigsten Ergebnisse kompakt, damit die gesamte Präsentation inklusive Demo innerhalb des Zeitlimits bleibt.
+
+Falls der vollständige Ablauf gefragt ist, kann ich `02_DemoAblauf.sql` direkt zeigen.
+
+Falls eine bestimmte Tabelle gefragt ist, kann ich diese im SSMS Object Explorer öffnen und die Struktur oder vorhandene Daten direkt anzeigen.
 
 ---
 
@@ -328,6 +417,7 @@ Die Demo ist bewusst reproduzierbar. Sie hängt nicht von zufällig vorhandenen 
 - lesbares ER-Modell trotz grossem Schema
 - reproduzierbare Infrastruktur
 - reproduzierbare Präsentationsdaten
+- Präsentationsdemo innerhalb des Zeitlimits
 
 ## Lerngewinn
 
@@ -358,12 +448,13 @@ Der finale Projektstand umfasst:
 - **5 Views**
 - **6 Stored Procedures**
 - **5 Seed-Skripte**
-- **2 Demo-Skripte**
+- **3 Demo-Skripte**
 - umfangreiche Constraints
 - vollständiges ER-Modell
 - technische Dokumentation
 - erfolgreichen Rebuild-Test
 - erfolgreich getesteten Demo-Ablauf
+- kurze Präsentationsdemo
 - versionierten Stand auf GitHub
 
 ## Ergebnis
@@ -374,18 +465,191 @@ Es liegt ein umfangreicher, getesteter, dokumentierter und reproduzierbarer Date
 
 Das Projekt erfüllt das gesetzte Ziel. Nicht jede Funktion eines realen Verbandssystems ist umgesetzt, aber die gewählten Kernbereiche sind relational modelliert, technisch abgesichert, getestet und reproduzierbar dokumentiert.
 
+Nach diesem Fazit wechsle ich direkt zu SSMS und führe die kurze Live-Demo aus. Nach der Demo muss nicht mehr zu PowerPoint zurückgewechselt werden.
+
+---
+
+# Präsentationstag – Vorbereitung
+
+## Vor dem Start
+
+- Repository auf aktuellen GitHub-Stand bringen
+- VM frühzeitig starten
+- SQL Server prüfen
+- SSMS öffnen
+- Verbindung zu `127.0.0.1,1433` herstellen
+- `03_PraesentationsDemo.sql` öffnen
+- Präsentationsdemo einmal testen
+- PowerPoint öffnen
+- Präsentationsmodus testen
+- SSMS im Hintergrund für schnellen Wechsel bereithalten
+- Benachrichtigungen deaktivieren
+- Netzteil anschliessen
+- Präsentation mit Stoppuhr üben
+
+## Repository prüfen
+
+```powershell
+cd C:\GithubRepo\STT-DB_Modularbeit2
+git pull
+git status
+```
+
+Erwartet:
+
+```text
+On branch main
+Your branch is up to date with 'origin/main'.
+
+nothing to commit, working tree clean
+```
+
+## VM starten
+
+```powershell
+cd C:\GithubRepo\STT-DB_Modularbeit2\infrastructure
+vagrant up
+```
+
+Status prüfen:
+
+```powershell
+vagrant status
+```
+
+Erwartet:
+
+```text
+default                   running (virtualbox)
+```
+
+SSH prüfen:
+
+```powershell
+vagrant ssh -c "echo VM_OK"
+```
+
+Erwartet:
+
+```text
+VM_OK
+```
+
+SQL Server prüfen:
+
+```powershell
+vagrant ssh -c "systemctl is-active mssql-server"
+```
+
+Erwartet:
+
+```text
+active
+```
+
+### Bekannte Besonderheit der VM
+
+Beim ersten `vagrant up` kann Vagrant bei:
+
+```text
+Waiting for machine to boot...
+```
+
+hängen, obwohl VirtualBox die VM bereits gestartet hat.
+
+Deshalb die VM am Präsentationstag frühzeitig starten und nicht erst unmittelbar vor der Präsentation.
+
+---
+
+# Fragen während oder nach der Präsentation
+
+## Bestimmte Tabelle zeigen
+
+Im SSMS Object Explorer:
+
+```text
+Databases
+└── STT_DB
+    └── Tables
+```
+
+Die gewünschte Tabelle auswählen.
+
+Um vorhandene Daten zu zeigen:
+
+```text
+Rechtsklick → Select Top 1000 Rows
+```
+
+Um Struktur, Spalten und Datentypen zu zeigen:
+
+```text
+Rechtsklick → Design
+```
+
+Eine Tabelle kann zusätzlich aufgeklappt werden. Dort sind beispielsweise sichtbar:
+
+```text
+Columns
+Keys
+Constraints
+Indexes
+Statistics
+```
+
+## Vollständigen Geschäftsablauf zeigen
+
+Falls gefragt wird, ob `03_PraesentationsDemo.sql` nur SELECT-Abfragen enthält:
+
+> `03_PraesentationsDemo.sql` ist bewusst als kurze Präsentationsansicht aufgebaut. Der vollständige reproduzierbare Geschäftsablauf befindet sich in `02_DemoAblauf.sql`. Die definierte Ausgangslage wird mit `01_DemoDaten.sql` erzeugt.
+
+Danach kann bei Bedarf `02_DemoAblauf.sql` im Editor gezeigt werden.
+
 ---
 
 # Backup für die Präsentation
 
 Falls die Live-Demo nicht funktioniert:
 
-1. GitHub-Repository öffnen
-2. `README.md` zeigen
-3. `docs/ER-Diagramm.md` zeigen
-4. `docs/Tests-und-Qualitaetssicherung.md` zeigen
-5. `sql/demo/02_DemoAblauf.sql` zeigen
-6. erfolgreichen Rebuild und Demo-Ergebnisse erklären
+1. nicht während der Präsentation lange debuggen
+2. `03_PraesentationsDemo.sql` im Editor zeigen
+3. `02_DemoAblauf.sql` als vollständigen Geschäftsablauf zeigen
+4. GitHub-Repository öffnen
+5. `README.md` zeigen
+6. `docs/ER-Diagramm.md` zeigen
+7. `docs/Tests-und-Qualitaetssicherung.md` zeigen
+8. erfolgreichen Rebuild und die bereits getesteten Demo-Ergebnisse erklären
+
+Der technische Projektstand wurde vor der Präsentation vollständig getestet.
+
+---
+
+# Letzter Kurzcheck
+
+Unmittelbar vor der Präsentation:
+
+- [ ] Netzteil angeschlossen
+- [ ] VM läuft
+- [ ] SSH funktioniert
+- [ ] SQL Server ist `active`
+- [ ] SSMS ist verbunden
+- [ ] `03_PraesentationsDemo.sql` ist geöffnet
+- [ ] Präsentationsdemo wurde getestet
+- [ ] PowerPoint ist geöffnet
+- [ ] richtige Präsentationsversion ist geöffnet
+- [ ] Präsentationsmodus funktioniert
+- [ ] SSMS liegt für den schnellen Wechsel bereit
+- [ ] Benachrichtigungen sind deaktiviert
+- [ ] Zeitlimit im Kopf: maximal 10 Minuten
+- [ ] Präsentation und Demo wurden mit Stoppuhr geübt
+
+## Wichtig
+
+Am Präsentationstag keine neuen Funktionen mehr einbauen und keine unnötigen Änderungen am Datenbankstand durchführen.
+
+Der Schwerpunkt liegt auf einer kurzen, verständlichen Präsentation und einer stabilen Live-Demo.
+
+---
 
 Repository:
 
